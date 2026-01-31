@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU 基础示例</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .example-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            display: block;
+            margin: 20px auto;
+            background-color: #000;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #1565c0;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebGPU 学习示例集合</h1>
+        
+        <div class="info">
+            <h3>欢迎来到 WebGPU 世界！</h3>
+            <p>这个页面包含了多个 WebGPU 示例，帮助你从零开始学习现代 GPU 编程。</p>
+        </div>
+
+        <!-- 示例1: 环境检测 -->
+        <div class="example-section">
+            <h2>示例 1: WebGPU 环境检测</h2>
+            <div id="compatibility-info"></div>
+            <button onclick="checkWebGPUSupport()">检测 WebGPU 支持</button>
+        </div>
+
+        <!-- 示例2: 清空画布 -->
+        <div class="example-section">
+            <h2>示例 2: 清空画布（纯色背景）</h2>
+            <canvas id="canvas-clear" width="800" height="400"></canvas>
+            <div class="controls">
+                <button onclick="clearCanvas('red')">红色</button>
+                <button onclick="clearCanvas('green')">绿色</button>
+                <button onclick="clearCanvas('blue')">蓝色</button>
+                <button onclick="clearCanvas('purple')">紫色</button>
+                <button onclick="animateColors()">动画颜色</button>
+            </div>
+            <div id="clear-info"></div>
+        </div>
+
+        <!-- 示例3: 计算着色器 -->
+        <div class="example-section">
+            <h2>示例 3: 计算着色器（数组求和）</h2>
+            <div class="controls">
+                <button onclick="runComputeShader()">运行计算着色器</button>
+                <button onclick="generateRandomData()">生成随机数据</button>
+            </div>
+            <div id="compute-info"></div>
+            <pre id="compute-results"></pre>
+        </div>
+
+        <!-- 代码说明 -->
+        <div class="example-section">
+            <h2>关键代码解释</h2>
+            <h3>1. 获取 WebGPU 适配器和设备</h3>
+            <pre><code>// 检查浏览器支持
+if (!navigator.gpu) {
+    throw new Error('WebGPU 不支持');
+}
+
+// 获取适配器
+const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) {
+    throw new Error('无法获取 WebGPU 适配器');
+}
+
+// 获取设备
+const device = await adapter.requestDevice();</code></pre>
+
+            <h3>2. 创建渲染管线</h3>
+            <pre><code>// 创建渲染管线
+const renderPipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex: {
+        module: device.createShaderModule({
+            code: vertexShaderCode
+        }),
+        entryPoint: 'main'
+    },
+    fragment: {
+        module: device.createShaderModule({
+            code: fragmentShaderCode
+        }),
+        entryPoint: 'main',
+        targets: [{
+            format: 'bgra8unorm'
+        }]
+    }
+});</code></pre>
+
+            <h3>3. 计算着色器示例</h3>
+            <pre><code>// WGSL 计算着色器
+const computeShaderCode = `
+@group(0) @binding(0) var&lt;storage, read_write&gt; data: array&lt;f32&gt;;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3&lt;u32&gt;) {
+    let index = global_id.x;
+    if (index >= arrayLength(&data)) {
+        return;
+    }
+    
+    // 对每个元素进行处理
+    data[index] = data[index] * 2.0;
+}`;</code></pre>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let device = null;
+        let canvas = null;
+        let context = null;
+        let animationId = null;
+
+        // 检查 WebGPU 支持
+        async function checkWebGPUSupport() {
+            const infoDiv = document.getElementById('compatibility-info');
+            
+            try {
+                if (!navigator.gpu) {
+                    throw new Error('WebGPU 不被此浏览器支持');
+                }
+
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    throw new Error('无法获取 WebGPU 适配器');
+                }
+
+                device = await adapter.requestDevice();
+                
+                // 获取适配器信息
+                const info = await adapter.requestAdapterInfo();
+                
+                infoDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ WebGPU 支持检测成功！</h4>
+                        <p><strong>适配器厂商:</strong> ${info.vendor || '未知'}</p>
+                        <p><strong>设备名称:</strong> ${info.device || '未知'}</p>
+                        <p><strong>架构:</strong> ${info.architecture || '未知'}</p>
+                        <p><strong>描述:</strong> ${info.description || '未知'}</p>
+                        <p><strong>后端:</strong> ${adapter.isFallbackAdapter ? '软件后端' : '硬件加速'}</p>
+                    </div>
+                `;
+
+                // 初始化画布
+                await initCanvas();
+                
+            } catch (error) {
+                infoDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ WebGPU 不可用</h4>
+                        <p><strong>错误:</strong> ${error.message}</p>
+                        <p><strong>解决方案:</strong></p>
+                        <ul>
+                            <li>使用 Chrome 113+ 或 Firefox 114+</li>
+                            <li>在 Chrome 中访问 chrome://flags/#enable-unsafe-webgpu</li>
+                            <li>在 Firefox 中设置 dom.webgpu.enabled = true</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        // 初始化画布
+        async function initCanvas() {
+            canvas = document.getElementById('canvas-clear');
+            context = canvas.getContext('webgpu');
+            
+            const format = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({
+                device: device,
+                format: format,
+                alphaMode: 'premultiplied'
+            });
+
+            document.getElementById('clear-info').innerHTML = `
+                <div class="success">
+                    <p>✅ 画布初始化成功！点击按钮改变背景颜色。</p>
+                </div>
+            `;
+        }
+
+        // 清空画布为指定颜色
+        function clearCanvas(colorName) {
+            if (!device || !context) {
+                alert('请先检测 WebGPU 支持！');
+                return;
+            }
+
+            const colors = {
+                red: [1.0, 0.0, 0.0, 1.0],
+                green: [0.0, 1.0, 0.0, 1.0],
+                blue: [0.0, 0.0, 1.0, 1.0],
+                purple: [0.5, 0.0, 0.5, 1.0]
+            };
+
+            const color = colors[colorName] || [0.0, 0.0, 0.0, 1.0];
+
+            // 创建命令编码器
+            const commandEncoder = device.createCommandEncoder();
+            
+            // 开始渲染过程
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: context.getCurrentTexture().createView(),
+                    clearValue: { r: color[0], g: color[1], b: color[2], a: color[3] },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+
+            renderPass.end();
+
+            // 提交命令
+            device.queue.submit([commandEncoder.finish()]);
+        }
+
+        // 动画颜色变化
+        function animateColors() {
+            if (!device || !context) {
+                alert('请先检测 WebGPU 支持！');
+                return;
+            }
+
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+                return;
+            }
+
+            let time = 0;
+            function animate() {
+                time += 0.016; // 大约 60 FPS
+
+                // 使用正弦函数创建平滑的颜色变化
+                const r = (Math.sin(time * 2) + 1) / 2;
+                const g = (Math.sin(time * 2 + Math.PI * 2/3) + 1) / 2;
+                const b = (Math.sin(time * 2 + Math.PI * 4/3) + 1) / 2;
+
+                const commandEncoder = device.createCommandEncoder();
+                const renderPass = commandEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: context.getCurrentTexture().createView(),
+                        clearValue: { r, g, b, a: 1.0 },
+                        loadOp: 'clear',
+                        storeOp: 'store'
+                    }]
+                });
+
+                renderPass.end();
+                device.queue.submit([commandEncoder.finish()]);
+
+                animationId = requestAnimationFrame(animate);
+            }
+
+            animate();
+        }
+
+        // 计算着色器示例
+        async function runComputeShader() {
+            if (!device) {
+                alert('请先检测 WebGPU 支持！');
+                return;
+            }
+
+            try {
+                // 创建测试数据
+                const input = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]);
+                
+                // 创建缓冲区
+                const bufferSize = input.byteLength;
+                const buffer = device.createBuffer({
+                    size: bufferSize,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+                });
+
+                // 写入数据
+                device.queue.writeBuffer(buffer, 0, input);
+
+                // 计算着色器代码
+                const computeShaderCode = `
+                    @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+
+                    @compute @workgroup_size(1)
+                    fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                        let index = global_id.x;
+                        if (index >= arrayLength(&data)) {
+                            return;
+                        }
+                        
+                        // 将每个元素乘以 2
+                        data[index] = data[index] * 2.0;
+                    }
+                `;
+
+                // 创建计算管线
+                const computePipeline = device.createComputePipeline({
+                    layout: 'auto',
+                    compute: {
+                        module: device.createShaderModule({
+                            code: computeShaderCode
+                        }),
+                        entryPoint: 'main'
+                    }
+                });
+
+                // 创建绑定组
+                const bindGroup = device.createBindGroup({
+                    layout: computePipeline.getBindGroupLayout(0),
+                    entries: [{
+                        binding: 0,
+                        resource: {
+                            buffer: buffer
+                        }
+                    }]
+                });
+
+                // 创建结果缓冲区
+                const resultBuffer = device.createBuffer({
+                    size: bufferSize,
+                    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+                });
+
+                // 执行计算
+                const commandEncoder = device.createCommandEncoder();
+                const computePass = commandEncoder.beginComputePass();
+                computePass.setPipeline(computePipeline);
+                computePass.setBindGroup(0, bindGroup);
+                computePass.dispatchWorkgroups(input.length);
+                computePass.end();
+
+                // 复制结果
+                commandEncoder.copyBufferToBuffer(buffer, 0, resultBuffer, 0, bufferSize);
+                device.queue.submit([commandEncoder.finish()]);
+
+                // 读取结果
+                await resultBuffer.mapAsync(GPUMapMode.READ);
+                const result = new Float32Array(resultBuffer.getMappedRange());
+                
+                // 显示结果
+                document.getElementById('compute-info').innerHTML = `
+                    <div class="success">
+                        <p>✅ 计算着色器执行成功！</p>
+                    </div>
+                `;
+                
+                document.getElementById('compute-results').textContent = 
+                    `输入数据: [${input.join(', ')}]\n` +
+                    `输出数据: [${Array.from(result).join(', ')}]\n` +
+                    `操作: 每个元素乘以 2\n` +
+                    `处理时间: < 1ms (GPU 并行处理)`;
+
+                resultBuffer.unmap();
+
+            } catch (error) {
+                document.getElementById('compute-info').innerHTML = `
+                    <div class="error">
+                        <p>❌ 计算着色器执行失败: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 生成随机数据进行计算
+        function generateRandomData() {
+            if (!device) {
+                alert('请先检测 WebGPU 支持！');
+                return;
+            }
+
+            const size = 1000;
+            const randomData = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                randomData[i] = Math.random() * 100;
+            }
+
+            document.getElementById('compute-results').textContent = 
+                `生成了 ${size} 个随机数\n` +
+                `范围: 0-100\n` +
+                `前10个数: [${Array.from(randomData.slice(0, 10)).map(x => x.toFixed(2)).join(', ')}...]\n` +
+                `点击"运行计算着色器"来处理这些数据`;
+        }
+
+        // 页面加载时自动检测
+        window.addEventListener('load', () => {
+            checkWebGPUSupport();
+        });
+    </script>
+</body>
+</html>

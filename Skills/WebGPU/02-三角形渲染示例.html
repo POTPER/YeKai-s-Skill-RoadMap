@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU 三角形渲染示例</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .example-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            display: block;
+            margin: 20px auto;
+            background-color: #000;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #1565c0;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebGPU 三角形渲染示例</h1>
+        
+        <div class="info">
+            <h3>学习目标</h3>
+            <p>通过这个示例，你将学会：</p>
+            <ul>
+                <li>如何创建和使用顶点缓冲区</li>
+                <li>编写 WGSL 着色器程序</li>
+                <li>设置渲染管线</li>
+                <li>理解图形渲染的基本流程</li>
+            </ul>
+        </div>
+
+        <!-- 基础三角形示例 -->
+        <div class="example-section">
+            <h2>示例 1: 基础三角形</h2>
+            <canvas id="canvas-basic" width="800" height="400"></canvas>
+            <div class="controls">
+                <button onclick="renderBasicTriangle()">渲染三角形</button>
+                <button onclick="clearCanvas('canvas-basic')">清空画布</button>
+            </div>
+            <div id="basic-info"></div>
+        </div>
+
+        <!-- 彩色三角形示例 -->
+        <div class="example-section">
+            <h2>示例 2: 彩色三角形</h2>
+            <canvas id="canvas-colored" width="800" height="400"></canvas>
+            <div class="controls">
+                <button onclick="renderColoredTriangle()">渲染彩色三角形</button>
+                <button onclick="startAnimation()">开始动画</button>
+                <button onclick="stopAnimation()">停止动画</button>
+            </div>
+            <div id="colored-info"></div>
+        </div>
+
+        <!-- 着色器代码说明 -->
+        <div class="example-section">
+            <h2>着色器代码解析</h2>
+            
+            <h3>顶点着色器 (Vertex Shader)</h3>
+            <pre><code>struct VertexInput {
+    @location(0) position: vec2&lt;f32&gt;,
+    @location(1) color: vec3&lt;f32&gt;,
+}
+
+struct VertexOutput {
+    @builtin(position) position: vec4&lt;f32&gt;,
+    @location(0) color: vec3&lt;f32&gt;,
+}
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = vec4&lt;f32&gt;(input.position, 0.0, 1.0);
+    output.color = input.color;
+    return output;
+}</code></pre>
+
+            <h3>片段着色器 (Fragment Shader)</h3>
+            <pre><code>@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4&lt;f32&gt; {
+    return vec4&lt;f32&gt;(input.color, 1.0);
+}</code></pre>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let device = null;
+        let canvases = {};
+        let contexts = {};
+        let animationId = null;
+
+        // 着色器代码
+        const vertexShaderCode = `
+            struct VertexInput {
+                @location(0) position: vec2<f32>,
+                @location(1) color: vec3<f32>,
+            }
+
+            struct VertexOutput {
+                @builtin(position) position: vec4<f32>,
+                @location(0) color: vec3<f32>,
+            }
+
+            struct Uniforms {
+                time: f32,
+            }
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(input: VertexInput) -> VertexOutput {
+                var output: VertexOutput;
+                
+                // 简单的旋转动画
+                let angle = uniforms.time;
+                let cos_a = cos(angle);
+                let sin_a = sin(angle);
+                
+                let rotated_x = input.position.x * cos_a - input.position.y * sin_a;
+                let rotated_y = input.position.x * sin_a + input.position.y * cos_a;
+                
+                output.position = vec4<f32>(rotated_x, rotated_y, 0.0, 1.0);
+                output.color = input.color;
+                return output;
+            }
+        `;
+
+        const fragmentShaderCode = `
+            struct VertexOutput {
+                @builtin(position) position: vec4<f32>,
+                @location(0) color: vec3<f32>,
+            }
+
+            struct Uniforms {
+                time: f32,
+            }
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                // 添加时间变化的颜色效果
+                let time = uniforms.time;
+                let r = input.color.r * (sin(time * 2.0) * 0.3 + 0.7);
+                let g = input.color.g * (sin(time * 2.5) * 0.3 + 0.7);
+                let b = input.color.b * (sin(time * 3.0) * 0.3 + 0.7);
+                return vec4<f32>(r, g, b, 1.0);
+            }
+        `;
+
+        const staticFragmentShaderCode = `
+            struct VertexOutput {
+                @builtin(position) position: vec4<f32>,
+                @location(0) color: vec3<f32>,
+            }
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                return vec4<f32>(input.color, 1.0);
+            }
+        `;
+
+        // 初始化 WebGPU
+        async function initWebGPU() {
+            if (device) return true;
+
+            try {
+                if (!navigator.gpu) {
+                    throw new Error('WebGPU 不被此浏览器支持');
+                }
+
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    throw new Error('无法获取 WebGPU 适配器');
+                }
+
+                device = await adapter.requestDevice();
+                return true;
+            } catch (error) {
+                console.error('WebGPU 初始化失败:', error);
+                return false;
+            }
+        }
+
+        // 初始化画布
+        function initCanvas(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const context = canvas.getContext('webgpu');
+            
+            const format = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({
+                device: device,
+                format: format,
+                alphaMode: 'premultiplied'
+            });
+
+            canvases[canvasId] = canvas;
+            contexts[canvasId] = context;
+            return { canvas, context };
+        }
+
+        // 创建顶点缓冲区
+        function createVertexBuffer(vertices) {
+            const buffer = device.createBuffer({
+                size: vertices.byteLength,
+                usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(buffer, 0, vertices);
+            return buffer;
+        }
+
+        // 创建统一缓冲区
+        function createUniformBuffer() {
+            return device.createBuffer({
+                size: 16, // f32 + padding
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+        }
+
+        // 创建渲染管线
+        function createRenderPipeline(vertexShader, fragmentShader) {
+            return device.createRenderPipeline({
+                layout: 'auto',
+                vertex: {
+                    module: device.createShaderModule({ code: vertexShader }),
+                    entryPoint: 'vs_main',
+                    buffers: [{
+                        arrayStride: 20, // 5 floats * 4 bytes = 20 bytes
+                        attributes: [
+                            {
+                                shaderLocation: 0,
+                                offset: 0,
+                                format: 'float32x2' // position
+                            },
+                            {
+                                shaderLocation: 1,
+                                offset: 8,
+                                format: 'float32x3' // color
+                            }
+                        ]
+                    }]
+                },
+                fragment: {
+                    module: device.createShaderModule({ code: fragmentShader }),
+                    entryPoint: 'fs_main',
+                    targets: [{
+                        format: navigator.gpu.getPreferredCanvasFormat()
+                    }]
+                },
+                primitive: {
+                    topology: 'triangle-list'
+                }
+            });
+        }
+
+        // 创建绑定组
+        function createBindGroup(pipeline, uniformBuffer) {
+            return device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [{
+                    binding: 0,
+                    resource: {
+                        buffer: uniformBuffer
+                    }
+                }]
+            });
+        }
+
+        // 清空画布
+        function clearCanvas(canvasId) {
+            if (!contexts[canvasId]) return;
+
+            const commandEncoder = device.createCommandEncoder();
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: contexts[canvasId].getCurrentTexture().createView(),
+                    clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+            renderPass.end();
+            device.queue.submit([commandEncoder.finish()]);
+        }
+
+        // 渲染基础三角形
+        async function renderBasicTriangle() {
+            if (!await initWebGPU()) {
+                document.getElementById('basic-info').innerHTML = 
+                    '<div class="error">WebGPU 初始化失败</div>';
+                return;
+            }
+
+            const { canvas, context } = initCanvas('canvas-basic');
+
+            // 三角形顶点数据 (x, y, r, g, b)
+            const vertices = new Float32Array([
+                 0.0,  0.5, 1.0, 0.0, 0.0, // 顶点 (红色)
+                -0.5, -0.5, 0.0, 1.0, 0.0, // 左下 (绿色)
+                 0.5, -0.5, 0.0, 0.0, 1.0  // 右下 (蓝色)
+            ]);
+
+            const vertexBuffer = createVertexBuffer(vertices);
+            const uniformBuffer = createUniformBuffer();
+            
+            // 使用静态着色器
+            const staticVertexShader = `
+                struct VertexInput {
+                    @location(0) position: vec2<f32>,
+                    @location(1) color: vec3<f32>,
+                }
+
+                struct VertexOutput {
+                    @builtin(position) position: vec4<f32>,
+                    @location(0) color: vec3<f32>,
+                }
+
+                @vertex
+                fn vs_main(input: VertexInput) -> VertexOutput {
+                    var output: VertexOutput;
+                    output.position = vec4<f32>(input.position, 0.0, 1.0);
+                    output.color = input.color;
+                    return output;
+                }
+            `;
+            
+            const pipeline = createRenderPipeline(staticVertexShader, staticFragmentShaderCode);
+
+            // 渲染
+            const commandEncoder = device.createCommandEncoder();
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: context.getCurrentTexture().createView(),
+                    clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+
+            renderPass.setPipeline(pipeline);
+            renderPass.setVertexBuffer(0, vertexBuffer);
+            renderPass.draw(3);
+            renderPass.end();
+
+            device.queue.submit([commandEncoder.finish()]);
+
+            document.getElementById('basic-info').innerHTML = 
+                '<div class="success">✅ 基础三角形渲染成功！这是你的第一个 WebGPU 图形程序。</div>';
+        }
+
+        // 渲染彩色三角形
+        async function renderColoredTriangle() {
+            if (!await initWebGPU()) return;
+
+            const { canvas, context } = initCanvas('canvas-colored');
+
+            // 创建更大的彩色三角形
+            const vertices = new Float32Array([
+                 0.0,  0.7, 1.0, 0.0, 0.0, // 顶点 (红色)
+                -0.7, -0.7, 0.0, 1.0, 0.0, // 左下 (绿色)
+                 0.7, -0.7, 0.0, 0.0, 1.0  // 右下 (蓝色)
+            ]);
+
+            const vertexBuffer = createVertexBuffer(vertices);
+            const uniformBuffer = createUniformBuffer();
+            const pipeline = createRenderPipeline(vertexShaderCode, fragmentShaderCode);
+            const bindGroup = createBindGroup(pipeline, uniformBuffer);
+
+            // 更新统一缓冲区
+            const uniformData = new Float32Array([0.0, 0.0, 0.0, 0.0]); // time = 0
+            device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+
+            const commandEncoder = device.createCommandEncoder();
+            const renderPass = commandEncoder.beginRenderPass({
+                colorAttachments: [{
+                    view: context.getCurrentTexture().createView(),
+                    clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+                    loadOp: 'clear',
+                    storeOp: 'store'
+                }]
+            });
+
+            renderPass.setPipeline(pipeline);
+            renderPass.setBindGroup(0, bindGroup);
+            renderPass.setVertexBuffer(0, vertexBuffer);
+            renderPass.draw(3);
+            renderPass.end();
+
+            device.queue.submit([commandEncoder.finish()]);
+
+            document.getElementById('colored-info').innerHTML = 
+                '<div class="success">✅ 彩色三角形渲染成功！注意颜色在顶点间的平滑插值。</div>';
+        }
+
+        // 开始动画
+        async function startAnimation() {
+            if (!await initWebGPU()) return;
+
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+
+            const { canvas, context } = initCanvas('canvas-colored');
+
+            const vertices = new Float32Array([
+                 0.0,  0.5, 1.0, 1.0, 0.0,
+                -0.5, -0.5, 0.0, 1.0, 1.0,
+                 0.5, -0.5, 1.0, 0.0, 1.0
+            ]);
+
+            const vertexBuffer = createVertexBuffer(vertices);
+            const uniformBuffer = createUniformBuffer();
+            const pipeline = createRenderPipeline(vertexShaderCode, fragmentShaderCode);
+            const bindGroup = createBindGroup(pipeline, uniformBuffer);
+
+            function animate() {
+                const time = performance.now() / 1000.0;
+
+                // 更新统一缓冲区
+                const uniformData = new Float32Array([time, 0.0, 0.0, 0.0]);
+                device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+
+                const commandEncoder = device.createCommandEncoder();
+                const renderPass = commandEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: context.getCurrentTexture().createView(),
+                        clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+                        loadOp: 'clear',
+                        storeOp: 'store'
+                    }]
+                });
+
+                renderPass.setPipeline(pipeline);
+                renderPass.setBindGroup(0, bindGroup);
+                renderPass.setVertexBuffer(0, vertexBuffer);
+                renderPass.draw(3);
+                renderPass.end();
+
+                device.queue.submit([commandEncoder.finish()]);
+
+                animationId = requestAnimationFrame(animate);
+            }
+
+            animate();
+
+            document.getElementById('colored-info').innerHTML = 
+                '<div class="success">✅ 动画开始！三角形正在旋转并变换颜色。</div>';
+        }
+
+        // 停止动画
+        function stopAnimation() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+                document.getElementById('colored-info').innerHTML = 
+                    '<div class="info">动画已停止</div>';
+            }
+        }
+
+        // 页面加载时自动初始化
+        window.addEventListener('load', async () => {
+            const success = await initWebGPU();
+            if (success) {
+                console.log('WebGPU 初始化成功！');
+            } else {
+                console.error('WebGPU 初始化失败！');
+            }
+        });
+    </script>
+</body>
+</html>

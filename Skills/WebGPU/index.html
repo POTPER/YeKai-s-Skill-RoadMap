@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU 学习中心</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .card h3 {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .card p {
+            margin-bottom: 20px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        
+        .card ul {
+            margin-bottom: 20px;
+            padding-left: 20px;
+        }
+        
+        .card li {
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #FF5252, #26A69A);
+        }
+        
+        .progress-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 30px;
+        }
+        
+        .progress-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .progress-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .progress-bar {
+            width: 200px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ECDC4, #44A08D);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        
+        .status.complete {
+            background: rgba(76, 175, 80, 0.3);
+            color: #4CAF50;
+        }
+        
+        .status.in-progress {
+            background: rgba(255, 193, 7, 0.3);
+            color: #FFC107;
+        }
+        
+        .status.pending {
+            background: rgba(158, 158, 158, 0.3);
+            color: #9E9E9E;
+        }
+        
+        .resources {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .resource-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .resource-link {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .resource-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .resource-link a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .emoji {
+            font-size: 2em;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 WebGPU 学习中心</h1>
+            <p>掌握现代 GPU 编程，释放 Web 应用的无限潜能</p>
+        </div>
+
+        <!-- 学习进度 -->
+        <div class="progress-section">
+            <h2>📊 学习进度</h2>
+            <div class="progress-item">
+                <span>基础环境设置</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 100%"></div>
+                </div>
+                <span class="status complete">✅ 完成</span>
+            </div>
+            <div class="progress-item">
+                <span>三角形渲染</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 100%"></div>
+                </div>
+                <span class="status complete">✅ 完成</span>
+            </div>
+            <div class="progress-item">
+                <span>计算着色器</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 100%"></div>
+                </div>
+                <span class="status complete">✅ 完成</span>
+            </div>
+            <div class="progress-item">
+                <span>纹理与图像处理</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 80%"></div>
+                </div>
+                <span class="status in-progress">🔄 学习中</span>
+            </div>
+            <div class="progress-item">
+                <span>高级 3D 渲染</span>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+                <span class="status pending">⏳ 待开始</span>
+            </div>
+        </div>
+
+        <!-- 主要示例 -->
+        <div class="grid">
+            <div class="card">
+                <h3>🎯 基础入门</h3>
+                <p>从零开始学习 WebGPU 的核心概念和基础操作。</p>
+                <ul>
+                    <li>WebGPU 环境检测</li>
+                    <li>设备和适配器配置</li>
+                    <li>画布初始化</li>
+                    <li>第一个渲染程序</li>
+                </ul>
+                <a href="01-基础示例.html" class="btn btn-primary">开始学习</a>
+            </div>
+
+            <div class="card">
+                <h3>🔺 图形渲染</h3>
+                <p>学习使用着色器程序渲染基础几何图形。</p>
+                <ul>
+                    <li>顶点和片段着色器</li>
+                    <li>WGSL 语言基础</li>
+                    <li>渲染管线配置</li>
+                    <li>动画和变换</li>
+                </ul>
+                <a href="02-三角形渲染示例.html" class="btn">查看示例</a>
+            </div>
+
+            <div class="card">
+                <h3>⚡ 并行计算</h3>
+                <p>利用 GPU 的强大并行计算能力进行数据处理。</p>
+                <ul>
+                    <li>计算着色器原理</li>
+                    <li>工作组和线程调度</li>
+                    <li>存储缓冲区操作</li>
+                    <li>性能优化技巧</li>
+                </ul>
+                <a href="04-计算着色器实战.html" class="btn">体验计算</a>
+            </div>
+
+            <div class="card">
+                <h3>🖼️ 图像处理</h3>
+                <p>掌握纹理操作和高级图像处理技术。</p>
+                <ul>
+                    <li>纹理采样和存储</li>
+                    <li>图像滤镜实现</li>
+                    <li>实时视频处理</li>
+                    <li>3D 纹理映射</li>
+                </ul>
+                <a href="05-纹理和图像处理指南.md" class="btn">学习指南</a>
+            </div>
+        </div>
+
+        <!-- 学习资源 -->
+        <div class="resources">
+            <h2>📚 学习资源</h2>
+            <p>完整的学习路线图和参考资料，助你快速掌握 WebGPU 技术。</p>
+            
+            <div class="resource-links">
+                <div class="resource-link">
+                    <span class="emoji">🗺️</span>
+                    <a href="WebGPU学习路线图.md">完整学习路线图</a>
+                </div>
+                <div class="resource-link">
+                    <span class="emoji">📖</span>
+                    <a href="03-计算着色器教程.md">计算着色器教程</a>
+                </div>
+                <div class="resource-link">
+                    <span class="emoji">🎨</span>
+                    <a href="05-纹理和图像处理指南.md">图像处理指南</a>
+                </div>
+                <div class="resource-link">
+                    <span class="emoji">💻</span>
+                    <a href="https://webgpufundamentals.org/" target="_blank">WebGPU 官方教程</a>
+                </div>
+                <div class="resource-link">
+                    <span class="emoji">📝</span>
+                    <a href="https://www.w3.org/TR/webgpu/" target="_blank">WebGPU 规范</a>
+                </div>
+                <div class="resource-link">
+                    <span class="emoji">🔧</span>
+                    <a href="https://www.w3.org/TR/WGSL/" target="_blank">WGSL 语言规范</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学习建议 -->
+        <div class="card" style="margin-top: 30px;">
+            <h3>💡 学习建议</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                <div>
+                    <h4>🚀 入门阶段</h4>
+                    <ul>
+                        <li>先运行基础示例</li>
+                        <li>理解核心概念</li>
+                        <li>动手修改代码</li>
+                        <li>阅读学习路线图</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>⚡ 进阶阶段</h4>
+                    <ul>
+                        <li>实践计算着色器</li>
+                        <li>学习图像处理</li>
+                        <li>尝试性能优化</li>
+                        <li>创建小项目</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>🎯 高级阶段</h4>
+                    <ul>
+                        <li>开发复杂应用</li>
+                        <li>研究前沿技术</li>
+                        <li>参与开源项目</li>
+                        <li>分享学习心得</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🌟 祝你在 WebGPU 的学习路上收获满满！</p>
+            <p>有问题可以查看官方文档或社区讨论 📖</p>
+        </div>
+    </div>
+
+    <script>
+        // 简单的页面交互
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查 WebGPU 支持
+            if (navigator.gpu) {
+                console.log('✅ WebGPU 支持检测通过！');
+            } else {
+                console.warn('❌ 当前浏览器不支持 WebGPU');
+                
+                // 显示提示信息
+                const warning = document.createElement('div');
+                warning.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: rgba(255, 87, 34, 0.9);
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 8px;
+                    font-weight: 500;
+                    z-index: 1000;
+                    max-width: 300px;
+                `;
+                warning.innerHTML = `
+                    ⚠️ WebGPU 不可用<br>
+                    <small>请使用 Chrome 113+ 或启用 WebGPU 标志</small>
+                `;
+                document.body.appendChild(warning);
+                
+                // 5秒后自动消失
+                setTimeout(() => {
+                    warning.style.opacity = '0';
+                    setTimeout(() => warning.remove(), 300);
+                }, 5000);
+            }
+            
+            // 添加卡片悬停效果
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-8px) scale(1.02)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

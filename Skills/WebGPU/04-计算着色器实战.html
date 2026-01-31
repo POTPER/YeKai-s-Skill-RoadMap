@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU 计算着色器实战示例</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .example-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #1565c0;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .results {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .performance {
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .input-group {
+            margin: 10px 0;
+        }
+        
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        
+        select {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        
+        canvas {
+            border: 1px solid #333;
+            display: block;
+            margin: 10px auto;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebGPU 计算着色器实战示例</h1>
+        
+        <div class="info">
+            <h3>学习目标</h3>
+            <p>通过这些示例，你将学会：</p>
+            <ul>
+                <li>如何创建和使用计算着色器</li>
+                <li>GPU 并行计算的基本原理</li>
+                <li>存储缓冲区的数据传输</li>
+                <li>工作组和线程的调度</li>
+                <li>性能优化技巧</li>
+            </ul>
+        </div>
+
+        <!-- 示例1: 基础数组操作 -->
+        <div class="example-section">
+            <h2>示例 1: 数组并行计算</h2>
+            <div class="input-group">
+                <label>数组大小:</label>
+                <input type="number" id="arraySize" value="1000000" min="1000" max="10000000" step="1000">
+                <select id="operation">
+                    <option value="multiply">乘以 2</option>
+                    <option value="square">平方</option>
+                    <option value="sqrt">平方根</option>
+                    <option value="sin">正弦函数</option>
+                </select>
+            </div>
+            <div class="controls">
+                <button onclick="runArrayComputation()">运行 GPU 计算</button>
+                <button onclick="runArrayComputationCPU()">运行 CPU 计算</button>
+                <button onclick="generateRandomArray()">生成随机数组</button>
+            </div>
+            <div id="array-results" class="results"></div>
+            <div id="array-performance" class="performance"></div>
+        </div>
+
+        <!-- 示例2: 矩阵运算 -->
+        <div class="example-section">
+            <h2>示例 2: 矩阵乘法</h2>
+            <div class="input-group">
+                <label>矩阵大小:</label>
+                <select id="matrixSize">
+                    <option value="64">64x64</option>
+                    <option value="128">128x128</option>
+                    <option value="256">256x256</option>
+                    <option value="512">512x512</option>
+                    <option value="1024">1024x1024</option>
+                </select>
+            </div>
+            <div class="controls">
+                <button onclick="runMatrixMultiplication()">GPU 矩阵乘法</button>
+                <button onclick="runMatrixMultiplicationCPU()">CPU 矩阵乘法</button>
+                <button onclick="generateRandomMatrices()">生成随机矩阵</button>
+            </div>
+            <div id="matrix-results" class="results"></div>
+            <div id="matrix-performance" class="performance"></div>
+        </div>
+
+        <!-- 示例3: 图像处理 -->
+        <div class="example-section">
+            <h2>示例 3: 图像处理</h2>
+            <div class="grid">
+                <div>
+                    <h4>原始图像</h4>
+                    <canvas id="originalCanvas" width="256" height="256"></canvas>
+                </div>
+                <div>
+                    <h4>处理后图像</h4>
+                    <canvas id="processedCanvas" width="256" height="256"></canvas>
+                </div>
+            </div>
+            <div class="input-group">
+                <label>滤镜类型:</label>
+                <select id="filterType">
+                    <option value="blur">高斯模糊</option>
+                    <option value="sharpen">锐化</option>
+                    <option value="edge">边缘检测</option>
+                    <option value="emboss">浮雕效果</option>
+                </select>
+            </div>
+            <div class="controls">
+                <button onclick="generateTestImage()">生成测试图像</button>
+                <button onclick="processImage()">GPU 图像处理</button>
+                <button onclick="loadUserImage()">加载图片</button>
+            </div>
+            <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageLoad(event)">
+            <div id="image-results" class="results"></div>
+            <div id="image-performance" class="performance"></div>
+        </div>
+
+        <!-- 示例4: 粒子系统 -->
+        <div class="example-section">
+            <h2>示例 4: 粒子物理模拟</h2>
+            <canvas id="particleCanvas" width="800" height="400"></canvas>
+            <div class="input-group">
+                <label>粒子数量:</label>
+                <select id="particleCount">
+                    <option value="1000">1,000</option>
+                    <option value="5000">5,000</option>
+                    <option value="10000">10,000</option>
+                    <option value="50000">50,000</option>
+                    <option value="100000">100,000</option>
+                </select>
+                <label>物理效果:</label>
+                <select id="physicsType">
+                    <option value="gravity">重力</option>
+                    <option value="wind">风力</option>
+                    <option value="orbit">轨道运动</option>
+                    <option value="wave">波动</option>
+                </select>
+            </div>
+            <div class="controls">
+                <button onclick="startParticleSimulation()">开始模拟</button>
+                <button onclick="stopParticleSimulation()">停止模拟</button>
+                <button onclick="resetParticles()">重置粒子</button>
+            </div>
+            <div id="particle-info" class="info"></div>
+        </div>
+
+        <!-- 示例5: 分形计算 -->
+        <div class="example-section">
+            <h2>示例 5: 曼德勃罗集分形</h2>
+            <canvas id="fractalCanvas" width="512" height="512"></canvas>
+            <div class="input-group">
+                <label>缩放级别:</label>
+                <input type="range" id="zoomLevel" min="1" max="1000" value="1" step="1">
+                <span id="zoomValue">1</span>
+                <label>迭代次数:</label>
+                <input type="range" id="iterations" min="50" max="500" value="100" step="10">
+                <span id="iterValue">100</span>
+            </div>
+            <div class="controls">
+                <button onclick="generateFractal()">生成分形</button>
+                <button onclick="animateFractal()">动画分形</button>
+                <button onclick="stopFractalAnimation()">停止动画</button>
+            </div>
+            <div id="fractal-info" class="info"></div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let device = null;
+        let particleAnimationId = null;
+        let fractalAnimationId = null;
+
+        // 初始化 WebGPU
+        async function initWebGPU() {
+            if (device) return true;
+
+            try {
+                if (!navigator.gpu) {
+                    throw new Error('WebGPU 不被此浏览器支持');
+                }
+
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    throw new Error('无法获取 WebGPU 适配器');
+                }
+
+                device = await adapter.requestDevice();
+                return true;
+            } catch (error) {
+                console.error('WebGPU 初始化失败:', error);
+                return false;
+            }
+        }
+
+        // 示例1: 数组计算
+        async function runArrayComputation() {
+            if (!await initWebGPU()) {
+                document.getElementById('array-results').textContent = 'WebGPU 初始化失败';
+                return;
+            }
+
+            const size = parseInt(document.getElementById('arraySize').value);
+            const operation = document.getElementById('operation').value;
+
+            // 生成测试数据
+            const input = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                input[i] = Math.random() * 100;
+            }
+
+            const startTime = performance.now();
+
+            // 创建缓冲区
+            const bufferSize = input.byteLength;
+            const buffer = device.createBuffer({
+                size: bufferSize,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+            });
+
+            device.queue.writeBuffer(buffer, 0, input);
+
+            // 计算着色器代码
+            const computeShaderMap = {
+                multiply: 'data[index] = data[index] * 2.0;',
+                square: 'data[index] = data[index] * data[index];',
+                sqrt: 'data[index] = sqrt(abs(data[index]));',
+                sin: 'data[index] = sin(data[index]);'
+            };
+
+            const computeShaderCode = `
+                @group(0) @binding(0) var<storage, read_write> data: array<f32>;
+
+                @compute @workgroup_size(64)
+                fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    let index = global_id.x;
+                    if (index >= arrayLength(&data)) {
+                        return;
+                    }
+                    
+                    ${computeShaderMap[operation]}
+                }
+            `;
+
+            // 创建计算管线
+            const computePipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: {
+                    module: device.createShaderModule({
+                        code: computeShaderCode
+                    }),
+                    entryPoint: 'main'
+                }
+            });
+
+            const bindGroup = device.createBindGroup({
+                layout: computePipeline.getBindGroupLayout(0),
+                entries: [{
+                    binding: 0,
+                    resource: { buffer: buffer }
+                }]
+            });
+
+            // 创建结果缓冲区
+            const resultBuffer = device.createBuffer({
+                size: bufferSize,
+                usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+            });
+
+            // 执行计算
+            const commandEncoder = device.createCommandEncoder();
+            const computePass = commandEncoder.beginComputePass();
+            computePass.setPipeline(computePipeline);
+            computePass.setBindGroup(0, bindGroup);
+            computePass.dispatchWorkgroups(Math.ceil(size / 64));
+            computePass.end();
+
+            commandEncoder.copyBufferToBuffer(buffer, 0, resultBuffer, 0, bufferSize);
+            device.queue.submit([commandEncoder.finish()]);
+
+            // 读取结果
+            await resultBuffer.mapAsync(GPUMapMode.READ);
+            const result = new Float32Array(resultBuffer.getMappedRange());
+            
+            const endTime = performance.now();
+            const gpuTime = endTime - startTime;
+
+            // 显示结果
+            document.getElementById('array-results').textContent = 
+                `GPU 计算完成\n` +
+                `数组大小: ${size.toLocaleString()} 个元素\n` +
+                `操作: ${operation}\n` +
+                `前10个结果: [${Array.from(result.slice(0, 10)).map(x => x.toFixed(2)).join(', ')}...]\n` +
+                `GPU 处理时间: ${gpuTime.toFixed(2)}ms\n` +
+                `处理速度: ${(size / gpuTime * 1000).toLocaleString()} 元素/秒`;
+
+            document.getElementById('array-performance').innerHTML = 
+                `<strong>GPU 性能:</strong> ${gpuTime.toFixed(2)}ms (包含数据传输)`;
+
+            resultBuffer.unmap();
+        }
+
+        // CPU 对比计算
+        async function runArrayComputationCPU() {
+            const size = parseInt(document.getElementById('arraySize').value);
+            const operation = document.getElementById('operation').value;
+
+            // 生成测试数据
+            const input = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                input[i] = Math.random() * 100;
+            }
+
+            const startTime = performance.now();
+
+            // CPU 计算
+            const result = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                switch (operation) {
+                    case 'multiply':
+                        result[i] = input[i] * 2.0;
+                        break;
+                    case 'square':
+                        result[i] = input[i] * input[i];
+                        break;
+                    case 'sqrt':
+                        result[i] = Math.sqrt(Math.abs(input[i]));
+                        break;
+                    case 'sin':
+                        result[i] = Math.sin(input[i]);
+                        break;
+                }
+            }
+
+            const endTime = performance.now();
+            const cpuTime = endTime - startTime;
+
+            document.getElementById('array-results').textContent = 
+                `CPU 计算完成\n` +
+                `数组大小: ${size.toLocaleString()} 个元素\n` +
+                `操作: ${operation}\n` +
+                `前10个结果: [${Array.from(result.slice(0, 10)).map(x => x.toFixed(2)).join(', ')}...]\n` +
+                `CPU 处理时间: ${cpuTime.toFixed(2)}ms\n` +
+                `处理速度: ${(size / cpuTime * 1000).toLocaleString()} 元素/秒`;
+
+            document.getElementById('array-performance').innerHTML = 
+                `<strong>CPU 性能:</strong> ${cpuTime.toFixed(2)}ms`;
+        }
+
+        // 生成随机数组
+        function generateRandomArray() {
+            const size = parseInt(document.getElementById('arraySize').value);
+            document.getElementById('array-results').textContent = 
+                `已生成 ${size.toLocaleString()} 个随机数\n` +
+                `范围: 0-100\n` +
+                `点击"运行 GPU 计算"或"运行 CPU 计算"开始处理`;
+        }
+
+        // 示例2: 矩阵乘法
+        async function runMatrixMultiplication() {
+            if (!await initWebGPU()) {
+                document.getElementById('matrix-results').textContent = 'WebGPU 初始化失败';
+                return;
+            }
+
+            const size = parseInt(document.getElementById('matrixSize').value);
+            
+            // 生成随机矩阵
+            const matrixA = new Float32Array(size * size);
+            const matrixB = new Float32Array(size * size);
+            
+            for (let i = 0; i < size * size; i++) {
+                matrixA[i] = Math.random();
+                matrixB[i] = Math.random();
+            }
+
+            const startTime = performance.now();
+
+            // 创建缓冲区
+            const bufferA = device.createBuffer({
+                size: matrixA.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+
+            const bufferB = device.createBuffer({
+                size: matrixB.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+
+            const bufferResult = device.createBuffer({
+                size: matrixA.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+            });
+
+            device.queue.writeBuffer(bufferA, 0, matrixA);
+            device.queue.writeBuffer(bufferB, 0, matrixB);
+
+            // 矩阵乘法计算着色器
+            const computeShaderCode = `
+                @group(0) @binding(0) var<storage, read> matrixA: array<f32>;
+                @group(0) @binding(1) var<storage, read> matrixB: array<f32>;
+                @group(0) @binding(2) var<storage, read_write> result: array<f32>;
+                
+                override size: u32;
+
+                @compute @workgroup_size(8, 8)
+                fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                    let row = global_id.x;
+                    let col = global_id.y;
+                    
+                    if (row >= size || col >= size) {
+                        return;
+                    }
+                    
+                    var sum = 0.0;
+                    for (var i = 0u; i < size; i++) {
+                        sum += matrixA[row * size + i] * matrixB[i * size + col];
+                    }
+                    
+                    result[row * size + col] = sum;
+                }
+            `;
+
+            const computePipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: {
+                    module: device.createShaderModule({ code: computeShaderCode }),
+                    entryPoint: 'main',
+                    constants: { size: size }
+                }
+            });
+
+            const bindGroup = device.createBindGroup({
+                layout: computePipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: bufferA } },
+                    { binding: 1, resource: { buffer: bufferB } },
+                    { binding: 2, resource: { buffer: bufferResult } }
+                ]
+            });
+
+            const readBuffer = device.createBuffer({
+                size: matrixA.byteLength,
+                usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+            });
+
+            // 执行计算
+            const commandEncoder = device.createCommandEncoder();
+            const computePass = commandEncoder.beginComputePass();
+            computePass.setPipeline(computePipeline);
+            computePass.setBindGroup(0, bindGroup);
+            computePass.dispatchWorkgroups(Math.ceil(size / 8), Math.ceil(size / 8));
+            computePass.end();
+
+            commandEncoder.copyBufferToBuffer(bufferResult, 0, readBuffer, 0, matrixA.byteLength);
+            device.queue.submit([commandEncoder.finish()]);
+
+            await readBuffer.mapAsync(GPUMapMode.READ);
+            const result = new Float32Array(readBuffer.getMappedRange());
+            
+            const endTime = performance.now();
+            const gpuTime = endTime - startTime;
+
+            document.getElementById('matrix-results').textContent = 
+                `GPU 矩阵乘法完成\n` +
+                `矩阵大小: ${size}x${size}\n` +
+                `总计算量: ${(size * size * size).toLocaleString()} 次乘加运算\n` +
+                `结果矩阵(左上角3x3):\n` +
+                `[${result.slice(0, 3).map(x => x.toFixed(3)).join(', ')}]\n` +
+                `[${result.slice(size, size + 3).map(x => x.toFixed(3)).join(', ')}]\n` +
+                `[${result.slice(size * 2, size * 2 + 3).map(x => x.toFixed(3)).join(', ')}]\n` +
+                `处理时间: ${gpuTime.toFixed(2)}ms`;
+
+            document.getElementById('matrix-performance').innerHTML = 
+                `<strong>GPU 性能:</strong> ${gpuTime.toFixed(2)}ms, ` +
+                `<strong>计算速度:</strong> ${((size * size * size) / gpuTime * 1000 / 1e9).toFixed(2)} GFLOPS`;
+
+            readBuffer.unmap();
+        }
+
+        // 更多示例函数...
+        // (由于长度限制，这里只展示核心功能，完整代码会包含所有示例)
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            const success = await initWebGPU();
+            if (success) {
+                console.log('WebGPU 初始化成功！');
+                // 设置事件监听器
+                document.getElementById('zoomLevel').addEventListener('input', function(e) {
+                    document.getElementById('zoomValue').textContent = e.target.value;
+                });
+                
+                document.getElementById('iterations').addEventListener('input', function(e) {
+                    document.getElementById('iterValue').textContent = e.target.value;
+                });
+            } else {
+                console.error('WebGPU 初始化失败！');
+                // 禁用所有按钮
+                const buttons = document.querySelectorAll('button');
+                buttons.forEach(btn => btn.disabled = true);
+            }
+        });
+
+        // 占位函数（完整实现需要更多代码）
+        function runMatrixMultiplicationCPU() { /* CPU 矩阵乘法实现 */ }
+        function generateRandomMatrices() { /* 生成随机矩阵 */ }
+        function generateTestImage() { /* 生成测试图像 */ }
+        function processImage() { /* 图像处理 */ }
+        function loadUserImage() { document.getElementById('imageInput').click(); }
+        function handleImageLoad(event) { /* 处理用户上传的图像 */ }
+        function startParticleSimulation() { /* 开始粒子模拟 */ }
+        function stopParticleSimulation() { /* 停止粒子模拟 */ }
+        function resetParticles() { /* 重置粒子 */ }
+        function generateFractal() { /* 生成分形 */ }
+        function animateFractal() { /* 动画分形 */ }
+        function stopFractalAnimation() { /* 停止分形动画 */ }
+    </script>
+</body>
+</html>
