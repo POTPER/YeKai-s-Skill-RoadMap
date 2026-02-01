@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>混凝土裂缝深度检测仿真 (SVG版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: white; user-select: none; font-family: 'Segoe UI', sans-serif; }
+        .svg-container { width: 100%; height: 100%; }
+        .probe { cursor: pointer; transition: transform 0.2s; }
+        .probe:hover { filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.8)); }
+        .wave { animation: dash 2s linear infinite; }
+        @keyframes dash {
+            to { stroke-dashoffset: -100; }
+        }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        
+        /* UI Panel Styles */
+        .panel { background: rgba(30, 30, 30, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .btn { transition: all 0.2s; }
+        .btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+    <div id="app" class="h-screen flex flex-col relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="panel p-4 z-20 flex justify-between items-center shadow-lg">
+            <div>
+                <h1 class="text-xl font-bold text-blue-400">超声法检测裂缝深度 (TOFD)</h1>
+                <div class="flex items-center gap-2 text-sm text-gray-400">
+                    <span>当前阶段:</span>
+                    <span class="px-2 py-0.5 rounded bg-blue-900/50 text-blue-200 border border-blue-800">{{ currentStepInfo.title }}</span>
+                </div>
+            </div>
+            
+            <!-- Progress Steps -->
+            <div class="flex gap-1">
+                <div v-for="(step, idx) in steps" :key="idx" 
+                     class="w-8 h-1 rounded-full transition-all duration-300"
+                     :class="currentStep >= idx ? 'bg-blue-500' : 'bg-gray-700'">
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button @click="reset" class="text-gray-400 hover:text-white text-sm">↺ 重置</button>
+                <button @click="nextStep" :disabled="!canProceed"
+                        class="btn px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-white font-bold shadow-lg shadow-blue-900/20">
+                    下一步 ➜
+                </button>
+            </div>
+        </div>
+
+        <!-- Main SVG Canvas -->
+        <div class="flex-1 relative bg-gray-900 grid-bg">
+            <svg class="svg-container" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <!-- Concrete Texture -->
+                    <pattern id="concrete" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="#333"/>
+                        <circle cx="10" cy="10" r="1" fill="#444"/>
+                        <circle cx="50" cy="50" r="2" fill="#2a2a2a"/>
+                        <circle cx="80" cy="20" r="1.5" fill="#444"/>
+                        <circle cx="30" cy="80" r="1" fill="#2a2a2a"/>
+                    </pattern>
+                    <!-- Dirt Texture -->
+                    <pattern id="dirt" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+                        <rect width="50" height="50" fill="transparent"/>
+                        <path d="M10,10 Q20,20 10,30 T30,40" stroke="#554433" stroke-width="2" fill="none" opacity="0.6"/>
+                        <path d="M40,10 Q30,20 40,30" stroke="#443322" stroke-width="3" fill="none" opacity="0.5"/>
+                    </pattern>
+                    <!-- Gradient for Probe -->
+                    <linearGradient id="probeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#4b5563;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#9ca3af;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#4b5563;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+
+                <!-- 1. Background: Concrete Block -->
+                <rect x="50" y="200" width="700" height="400" fill="url(#concrete)" stroke="#222" stroke-width="2"/>
+                
+                <!-- 2. The Crack -->
+                <path d="M400,200 L405,250 L395,300 L402,380 L400,450" 
+                      fill="none" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+                
+                <!-- 3. Dirt Layer (Step 0) -->
+                <g v-if="currentStep === 0 && !isCleaned" @click="cleanSurface" class="cursor-pointer group">
+                    <rect x="50" y="200" width="700" height="400" fill="url(#dirt)" opacity="0.8" class="transition-opacity duration-500 group-hover:opacity-60"/>
+                    <text x="400" y="300" text-anchor="middle" fill="white" font-size="20" class="select-none pointer-events-none drop-shadow-md animate-pulse">
+                        👇 点击表面进行清理
+                    </text>
+                </g>
+
+                <!-- 4. Measurement Grid (Step 1) -->
+                <g v-if="currentStep >= 1 && isCleaned">
+                    <!-- Center Line -->
+                    <line x1="400" y1="200" x2="400" y2="600" stroke="rgba(255,255,255,0.2)" stroke-dasharray="5,5"/>
+                    
+                    <!-- Measurement Points -->
+                    <g v-if="currentStep >= 1">
+                        <template v-for="i in 5" :key="i">
+                            <!-- Left Points -->
+                            <circle :cx="400 - i * 50" cy="220" r="3" fill="#fbbf24" 
+                                    :opacity="layoutDone ? 1 : 0.3" 
+                                    class="transition-all duration-500">
+                            </circle>
+                            <!-- Right Points -->
+                            <circle :cx="400 + i * 50" cy="220" r="3" fill="#fbbf24"
+                                    :opacity="layoutDone ? 1 : 0.3"
+                                    class="transition-all duration-500">
+                            </circle>
+                            <!-- Labels -->
+                            <text v-if="layoutDone" :x="400 - i * 50" y="240" text-anchor="middle" font-size="10" fill="#aaa">{{ i*50 }}</text>
+                            <text v-if="layoutDone" :x="400 + i * 50" y="240" text-anchor="middle" font-size="10" fill="#aaa">{{ i*50 }}</text>
+                        </template>
+                    </g>
+                    
+                    <!-- Layout Guide Text -->
+                    <g v-if="currentStep === 1 && !layoutDone" @click="performLayout" class="cursor-pointer">
+                        <rect x="150" y="150" width="500" height="40" rx="20" fill="rgba(59, 130, 246, 0.8)"/>
+                        <text x="400" y="175" text-anchor="middle" fill="white" font-size="14" dominant-baseline="middle">
+                            🖱️ 点击布置测线 (单面平测法)
+                        </text>
+                    </g>
+                </g>
+
+                <!-- 5. Calibration Scene (Step 2) -->
+                <g v-if="currentStep === 2">
+                    <!-- T Probe -->
+                    <g :transform="`translate(${calibState === 0 ? 300 : 250}, 150)`" class="transition-all duration-1000">
+                        <rect x="-15" y="-40" width="30" height="40" fill="url(#probeGrad)" rx="2"/>
+                        <text x="0" y="-20" text-anchor="middle" fill="white" font-size="12">T</text>
+                        <path d="M0,0 L0,10" stroke="#333" stroke-width="2"/> <!-- Cable -->
+                    </g>
+                    <!-- R Probe -->
+                    <g :transform="`translate(${calibState === 0 ? 500 : 250}, 150)`" class="transition-all duration-1000">
+                        <rect x="-15" y="-40" width="30" height="40" fill="url(#probeGrad)" rx="2"/>
+                        <text x="0" y="-20" text-anchor="middle" fill="white" font-size="12">R</text>
+                    </g>
+                    
+                    <!-- Coupling Agent (when touching) -->
+                    <circle v-if="calibState === 1" cx="250" cy="150" r="5" fill="#fcd34d" opacity="0.8"/>
+
+                    <!-- Action Button inside SVG -->
+                    <g v-if="calibState === 0" @click="startCalibration" class="cursor-pointer">
+                        <rect x="350" y="100" width="100" height="30" rx="5" fill="#10b981"/>
+                        <text x="400" y="120" text-anchor="middle" fill="white" font-size="12" dominant-baseline="middle">开始校准 (t0)</text>
+                    </g>
+                </g>
+
+                <!-- 6. Measurement Scene (Step 3) -->
+                <g v-if="currentStep === 3">
+                    <!-- Dynamic Probes -->
+                    <g :transform="`translate(${400 - currentMeasureIdx * 50}, 200)`" class="transition-all duration-500">
+                        <rect x="-15" y="-40" width="30" height="40" fill="url(#probeGrad)" rx="2"/>
+                        <text x="0" y="-20" text-anchor="middle" fill="white" font-size="12">T</text>
+                        <!-- Sound Wave Animation -->
+                        <circle v-if="isMeasuring" cx="0" cy="0" r="0" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2">
+                            <animate attributeName="r" from="0" :to="Math.sqrt(Math.pow(currentMeasureIdx*50, 2) + Math.pow(250, 2))" dur="1s" repeatCount="indefinite"/>
+                            <animate attributeName="opacity" values="1;0" dur="1s" repeatCount="indefinite"/>
+                        </circle>
+                    </g>
+                    
+                    <g :transform="`translate(${400 + currentMeasureIdx * 50}, 200)`" class="transition-all duration-500">
+                        <rect x="-15" y="-40" width="30" height="40" fill="url(#probeGrad)" rx="2"/>
+                        <text x="0" y="-20" text-anchor="middle" fill="white" font-size="12">R</text>
+                    </g>
+
+                    <!-- Diffraction Path Visualization -->
+                    <path v-if="isMeasuring" 
+                          :d="`M${400 - currentMeasureIdx * 50},200 L400,450 L${400 + currentMeasureIdx * 50},200`" 
+                          fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,5" class="wave"/>
+                    
+                    <!-- Controls -->
+                    <g v-if="!isMeasuring && currentMeasureIdx <= 5" @click="takeMeasure" class="cursor-pointer">
+                        <rect x="350" y="100" width="100" height="30" rx="5" fill="#3b82f6"/>
+                        <text x="400" y="120" text-anchor="middle" fill="white" font-size="12" dominant-baseline="middle">
+                            测量点 {{ currentMeasureIdx }}
+                        </text>
+                    </g>
+                </g>
+
+            </svg>
+
+            <!-- Overlay Panels -->
+            
+            <!-- Calibration Info -->
+            <div v-if="currentStep === 2 && calibState === 1" class="absolute top-20 right-10 panel p-4 rounded w-64 animate-fade-in">
+                <h3 class="font-bold text-green-400 mb-2">校准完成</h3>
+                <p class="text-sm">零声时 t0 = <span class="text-yellow-400">1.2 μs</span></p>
+                <p class="text-sm">混凝土声速 v = <span class="text-yellow-400">4200 m/s</span></p>
+                <p class="text-xs text-gray-400 mt-2">说明：探头对接扣除系统延迟，完好区平测确定声速。</p>
+            </div>
+
+            <!-- Measurement Data -->
+            <div v-if="currentStep === 3" class="absolute top-20 right-10 panel p-4 rounded w-72">
+                <h3 class="font-bold text-blue-400 mb-2">数据记录</h3>
+                <div class="grid grid-cols-3 gap-2 text-xs border-b border-gray-600 pb-1 mb-1">
+                    <span>测距 L</span>
+                    <span>声时 t</span>
+                    <span>深度 h</span>
+                </div>
+                <div v-for="(data, idx) in measureData" :key="idx" class="grid grid-cols-3 gap-2 text-xs mb-1 font-mono">
+                    <span>{{ data.l }} mm</span>
+                    <span>{{ data.t }} μs</span>
+                    <span class="text-yellow-400">{{ data.h }} mm</span>
+                </div>
+                <div v-if="measureData.length > 0" class="mt-4 border-t border-gray-600 pt-2">
+                    <p class="text-xs text-gray-400">计算公式:</p>
+                    <p class="font-mono text-xs text-green-400">h = (v/2) * √(t² - (l/v)²)</p>
+                    <p class="text-sm font-bold mt-2">推算深度: <span class="text-red-400">250 mm</span></p>
+                </div>
+            </div>
+
+        </div>
+        
+        <!-- Bottom Instruction Bar -->
+        <div class="bg-black p-2 text-center text-sm text-gray-400">
+            {{ currentStepInfo.instruction }}
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                const steps = [
+                    { title: '表面处理', instruction: '清除裂缝表面的浮浆、灰尘和杂物，确保测试面干燥。' },
+                    { title: '测线布置', instruction: '以裂缝为轴线，布置对称的测点 (单面平测法)。' },
+                    { title: '仪器校准', instruction: '测定系统零声时 (t0) 和完好混凝土声速 (v)。' },
+                    { title: '裂缝测量', instruction: '逐点进行跨缝平测，读取声时和波幅。' }
+                ];
+
+                const currentStep = ref(0);
+                const isCleaned = ref(false);
+                const layoutDone = ref(false);
+                const calibState = ref(0); // 0: init, 1: done
+                const currentMeasureIdx = ref(1);
+                const isMeasuring = ref(false);
+                const measureData = ref([]);
+
+                const currentStepInfo = computed(() => steps[currentStep.value]);
+                
+                const canProceed = computed(() => {
+                    if (currentStep.value === 0) return isCleaned.value;
+                    if (currentStep.value === 1) return layoutDone.value;
+                    if (currentStep.value === 2) return calibState.value === 1;
+                    if (currentStep.value === 3) return measureData.value.length >= 5;
+                    return false;
+                });
+
+                // Actions
+                const cleanSurface = () => {
+                    isCleaned.value = true;
+                };
+
+                const performLayout = () => {
+                    layoutDone.value = true;
+                };
+
+                const startCalibration = () => {
+                    calibState.value = 1; // Animation handled by CSS class transition
+                };
+
+                const takeMeasure = () => {
+                    if (isMeasuring.value) return;
+                    isMeasuring.value = true;
+                    
+                    // Simulate Measurement
+                    setTimeout(() => {
+                        const l = currentMeasureIdx.value * 50 * 2; // Total distance
+                        const v = 4.2; // mm/us (4200 m/s)
+                        const trueDepth = 250;
+                        
+                        // Calculate theoretical time: t = 2 * sqrt(h^2 + (l/2)^2) / v
+                        const halfL = l / 2;
+                        const t = (2 * Math.sqrt(Math.pow(trueDepth, 2) + Math.pow(halfL, 2)) / v).toFixed(1);
+                        
+                        // Inverse calc for display
+                        const h_calc = ((v/2) * Math.sqrt(Math.pow(t, 2) - Math.pow(l/v, 2))).toFixed(0);
+
+                        measureData.value.push({ l, t, h: h_calc });
+                        isMeasuring.value = false;
+                        currentMeasureIdx.value++;
+                    }, 1500);
+                };
+
+                const nextStep = () => {
+                    if (currentStep.value < steps.length - 1) {
+                        currentStep.value++;
+                    } else {
+                        alert("检测流程演示结束！");
+                    }
+                };
+
+                const reset = () => {
+                    currentStep.value = 0;
+                    isCleaned.value = false;
+                    layoutDone.value = false;
+                    calibState.value = 0;
+                    currentMeasureIdx.value = 1;
+                    measureData.value = [];
+                };
+
+                return {
+                    steps,
+                    currentStep,
+                    currentStepInfo,
+                    isCleaned,
+                    layoutDone,
+                    calibState,
+                    currentMeasureIdx,
+                    isMeasuring,
+                    measureData,
+                    canProceed,
+                    cleanSurface,
+                    performLayout,
+                    startCalibration,
+                    takeMeasure,
+                    nextStep,
+                    reset
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

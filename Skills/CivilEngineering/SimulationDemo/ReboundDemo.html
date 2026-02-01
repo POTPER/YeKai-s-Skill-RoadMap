@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>混凝土回弹检测仿真</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/konva@9.2.0/konva.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; user-select: none; }
+        .tool-icon { transition: transform 0.2s; cursor: pointer; }
+        .tool-icon:active { transform: scale(0.95); }
+        .tool-selected { opacity: 1 !important; ring: 2px; ring-color: #3b82f6; background-color: rgba(59, 130, 246, 0.2); }
+        .canvas-container { background: url('https://images.unsplash.com/photo-1589939705384-5185137a7f0f?q=80&w=2670&auto=format&fit=crop') no-repeat center center; background-size: cover; }
+    </style>
+</head>
+<body>
+    <div id="app" class="h-screen flex flex-col text-white">
+        
+        <!-- Header -->
+        <div class="bg-gray-800 p-4 flex justify-between items-center shadow-lg z-10">
+            <div>
+                <h1 class="font-bold text-xl text-blue-400">实验：混凝土回弹法检测</h1>
+                <p class="text-sm text-gray-400">依据标准：JGJ/T 23-2011</p>
+            </div>
+            
+            <div class="flex gap-4 items-center">
+                 <div class="bg-gray-700 px-4 py-2 rounded-lg border border-gray-600">
+                    <span class="text-xs text-gray-400">已测点数</span>
+                    <div class="text-xl font-mono text-yellow-400">{{ validCount }}/16</div>
+                </div>
+                 <div v-if="reboundMean > 0" class="bg-gray-700 px-4 py-2 rounded-lg border border-gray-600">
+                    <span class="text-xs text-gray-400">回弹平均值 Rm</span>
+                    <div class="text-xl font-mono text-green-400">{{ reboundMean }}</div>
+                </div>
+            </div>
+
+            <button @click="resetExperiment" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
+                重置实验
+            </button>
+        </div>
+
+        <!-- Main Canvas -->
+        <div class="flex-1 relative canvas-container" ref="container">
+            <div id="konva-holder" class="absolute inset-0"></div>
+            
+            <!-- Data Grid Overlay -->
+            <div class="absolute top-4 right-4 bg-black/70 p-4 rounded-lg backdrop-blur-sm border border-white/10 w-64">
+                <h3 class="text-sm font-bold mb-2 text-gray-300 flex justify-between">
+                    <span>测区数据记录</span>
+                    <span class="text-xs font-normal text-gray-500">单位: MPa</span>
+                </h3>
+                <div class="grid grid-cols-4 gap-2">
+                    <div v-for="(val, idx) in 16" :key="idx" 
+                         class="aspect-square flex items-center justify-center rounded text-sm font-mono border transition-colors duration-300"
+                         :class="getGridClass(idx)">
+                        {{ reboundValues[idx] || (idx + 1) }}
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-gray-400 space-y-1">
+                    <div class="flex items-center"><span class="w-2 h-2 bg-red-900/50 border border-red-800 rounded mr-2"></span> 剔除 (3大3小)</div>
+                    <div class="flex items-center"><span class="w-2 h-2 bg-green-900 border border-green-700 rounded mr-2"></span> 有效计算值</div>
+                </div>
+            </div>
+
+            <!-- Guide -->
+            <div class="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/70 px-6 py-3 rounded-full pointer-events-none text-center">
+                <p class="font-bold text-yellow-400">{{ guideText }}</p>
+                <p class="text-xs text-gray-400 mt-1">操作提示：点击选中回弹仪，然后点击墙面网格点</p>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="h-24 bg-gray-900 border-t border-gray-700 flex items-center justify-center gap-8 p-2 z-10">
+            <div class="tool-icon flex flex-col items-center opacity-60 hover:opacity-100"
+                 :class="{'tool-selected': currentTool === 'hammer'}"
+                 @click="selectTool('hammer')">
+                <div class="text-3xl bg-gray-700 w-14 h-14 rounded-full flex items-center justify-center mb-1 shadow-inner border border-gray-600">
+                    🔫
+                </div>
+                <span class="text-xs font-medium">回弹仪</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const currentTool = ref(null);
+                const container = ref(null);
+                const reboundValues = ref(new Array(16).fill(null));
+                
+                let stage, layer, gridGroup;
+
+                const validCount = computed(() => reboundValues.value.filter(v => v !== null).length);
+                
+                const reboundMean = computed(() => {
+                    const validVals = reboundValues.value.filter(v => v !== null);
+                    if (validVals.length < 16) return 0;
+                    
+                    const sorted = [...validVals].sort((a, b) => a - b);
+                    // Remove top 3 and bottom 3
+                    const trimmed = sorted.slice(3, 13);
+                    const sum = trimmed.reduce((a, b) => a + b, 0);
+                    return (sum / 10).toFixed(1);
+                });
+
+                const guideText = computed(() => {
+                    if (validCount.value < 16) return `请采集第 ${validCount.value + 1} 个测点数据`;
+                    return "检测完成！Rm值已生成";
+                });
+
+                onMounted(() => {
+                    initStage();
+                    drawGrid();
+                });
+
+                const initStage = () => {
+                    const width = container.value.clientWidth;
+                    const height = container.value.clientHeight;
+
+                    stage = new Konva.Stage({
+                        container: 'konva-holder',
+                        width: width,
+                        height: height
+                    });
+
+                    layer = new Konva.Layer();
+                    stage.add(layer);
+
+                    // Click Interaction
+                    stage.on('click tap', (e) => {
+                        if (!currentTool.value) return;
+                        
+                        const pos = stage.getPointerPosition();
+                        handleInteraction(pos);
+                    });
+                };
+
+                const drawGrid = () => {
+                    gridGroup = new Konva.Group({
+                        x: stage.width() / 2 - 120,
+                        y: stage.height() / 2 - 120
+                    });
+
+                    // 4x4 Grid
+                    for (let i = 0; i < 16; i++) {
+                        const row = Math.floor(i / 4);
+                        const col = i % 4;
+                        
+                        const point = new Konva.Circle({
+                            x: col * 80,
+                            y: row * 80,
+                            radius: 8,
+                            fill: '#555',
+                            stroke: '#777',
+                            strokeWidth: 2,
+                            name: 'grid-point',
+                            id: `point-${i}`
+                        });
+
+                        // Hit Area (Larger transparent circle for easier clicking)
+                        const hitArea = new Konva.Circle({
+                            x: col * 80,
+                            y: row * 80,
+                            radius: 35,
+                            fill: 'transparent',
+                            name: 'hit-area',
+                            id: `hit-${i}`
+                        });
+                        
+                        gridGroup.add(hitArea);
+                        gridGroup.add(point);
+                    }
+                    
+                    // Border
+                    const border = new Konva.Rect({
+                        x: -40, y: -40,
+                        width: 320, height: 320,
+                        stroke: 'rgba(255,255,255,0.2)',
+                        strokeWidth: 2,
+                        dash: [10, 10]
+                    });
+                    gridGroup.add(border);
+
+                    layer.add(gridGroup);
+                };
+
+                const selectTool = (toolId) => {
+                    currentTool.value = currentTool.value === toolId ? null : toolId;
+                    // Change cursor
+                    stage.container().style.cursor = currentTool.value ? 'crosshair' : 'default';
+                };
+
+                const handleInteraction = (pos) => {
+                    if (currentTool.value !== 'hammer') return;
+
+                    // Check collision with grid points
+                    const transform = gridGroup.getAbsoluteTransform().copy();
+                    transform.invert();
+                    const localPos = transform.point(pos);
+
+                    let hitIdx = -1;
+                    for(let i=0; i<16; i++) {
+                        const col = i % 4;
+                        const row = Math.floor(i / 4);
+                        const px = col * 80;
+                        const py = row * 80;
+                        const dist = Math.sqrt(Math.pow(localPos.x - px, 2) + Math.pow(localPos.y - py, 2));
+                        
+                        if (dist < 35) { // Within hit area
+                            hitIdx = i;
+                            break;
+                        }
+                    }
+
+                    if (hitIdx !== -1 && reboundValues.value[hitIdx] === null) {
+                        performRebound(hitIdx);
+                    }
+                };
+
+                const performRebound = (idx) => {
+                    const point = gridGroup.findOne(`#point-${idx}`);
+                    
+                    // Animation
+                    new Konva.Tween({
+                        node: point,
+                        scaleX: 2, scaleY: 2,
+                        fill: '#fff',
+                        duration: 0.1,
+                        yoyo: true,
+                        onFinish: () => {
+                            point.scale({x: 1, y: 1});
+                            point.fill('#10B981'); // Green
+                        }
+                    }).play();
+
+                    // Sound effect (optional, simulated visually)
+                    
+                    // Generate Value (Mean ~36, range 30-42)
+                    const base = 36;
+                    const noise = Math.floor(Math.random() * 8) - 4; // -4 to +3
+                    const val = base + noise;
+                    
+                    reboundValues.value[idx] = val;
+                };
+
+                const getGridClass = (idx) => {
+                    const val = reboundValues.value[idx];
+                    if (val === null) return 'bg-gray-800 text-gray-600 border-gray-700';
+                    
+                    if (validCount.value < 16) return 'bg-blue-900 text-blue-200 border-blue-700';
+
+                    // After completion, highlight outliers
+                    const validVals = reboundValues.value;
+                    const sorted = [...validVals].sort((a, b) => a - b);
+                    const min3 = sorted.slice(0, 3);
+                    const max3 = sorted.slice(13, 16);
+                    
+                    if (min3.includes(val) || max3.includes(val)) {
+                        return 'bg-red-900/40 text-red-400 border-red-800 line-through opacity-70';
+                    }
+                    return 'bg-green-900 text-green-200 border-green-700 font-bold shadow-[0_0_10px_rgba(16,185,129,0.5)]';
+                };
+
+                const resetExperiment = () => {
+                    reboundValues.value = new Array(16).fill(null);
+                    // Reset point colors
+                    gridGroup.find('.grid-point').forEach(p => {
+                        p.fill('#555');
+                    });
+                };
+
+                return {
+                    currentTool,
+                    container,
+                    reboundValues,
+                    validCount,
+                    reboundMean,
+                    guideText,
+                    selectTool,
+                    getGridClass,
+                    resetExperiment
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

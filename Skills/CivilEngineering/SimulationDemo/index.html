@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D 交互式工程仿真：碳化检测</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/konva@9.2.0/konva.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; user-select: none; }
+        .tool-icon { transition: transform 0.2s; cursor: pointer; }
+        .tool-icon:active { cursor: grabbing; transform: scale(1.1); }
+        .tool-selected { opacity: 1 !important; ring: 2px; ring-color: #3b82f6; background-color: rgba(59, 130, 246, 0.2); }
+        .canvas-container { background: url('https://images.unsplash.com/photo-1518391846015-55a33d54ce83?q=80&w=2574&auto=format&fit=crop') no-repeat center center; background-size: cover; }
+    </style>
+</head>
+<body>
+    <div id="app" class="h-screen flex flex-col text-white">
+        
+        <!-- 顶部指引栏 -->
+        <div class="bg-gray-800 p-4 flex justify-between items-center shadow-lg z-10">
+            <div>
+                <h1 class="font-bold text-xl text-blue-400">任务：检测 C-2 柱碳化深度</h1>
+                <p class="text-sm text-gray-400">当前步骤: <span class="text-yellow-400">{{ currentStepName }}</span></p>
+            </div>
+            <div class="bg-gray-700 px-4 py-2 rounded-lg border border-gray-600">
+                <span class="text-xs text-gray-400">当前读数</span>
+                <div class="text-2xl font-mono text-green-400">{{ measuredValue }} mm</div>
+            </div>
+            <button @click="submitResult" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition-colors">
+                提交记录
+            </button>
+        </div>
+
+        <!-- 主视口 (Canvas) -->
+        <div class="flex-1 relative canvas-container" ref="container">
+            <div id="konva-holder" class="absolute inset-0"></div>
+            
+            <!-- 引导提示 -->
+            <div v-if="showGuide" class="absolute top-10 left-1/2 -translate-x-1/2 bg-black/70 px-6 py-3 rounded-full animate-bounce pointer-events-none">
+                👇 {{ guideText }}
+            </div>
+        </div>
+
+        <!-- 底部工具栏 (Inventory) -->
+        <div class="h-32 bg-gray-900 border-t border-gray-700 flex items-center justify-center gap-8 p-4 z-10">
+            <div v-for="tool in tools" :key="tool.id" 
+                 class="tool-icon flex flex-col items-center opacity-50 hover:opacity-100 transition-opacity"
+                 :class="{'tool-selected': currentTool === tool.id}"
+                 draggable="true"
+                 @dragstart="onDragStart(tool.id)"
+                 @click="selectTool(tool.id)">
+                <div class="text-4xl bg-gray-700 w-16 h-16 rounded-full flex items-center justify-center mb-2 shadow-inner border border-gray-600">
+                    {{ tool.icon }}
+                </div>
+                <span class="text-xs font-medium">{{ tool.name }}</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // 状态管理
+                const currentStep = ref(0); // 0:钻孔, 1:清孔, 2:滴液, 3:测量
+                const currentTool = ref(null);
+                const measuredValue = ref('0.0');
+                const container = ref(null);
+                
+                // 后台生成的真值 (Simulation Truth)
+                const TRUE_CARBONATION_DEPTH = 8.5; // mm
+                
+                // Konva 实例
+                let stage, layer, holeGroup, caliperGroup;
+                
+                const tools = [
+                    { id: 'drill', name: '电锤', icon: '🔨' },
+                    { id: 'blower', name: '洗耳球', icon: '💨' },
+                    { id: 'phenolphthalein', name: '酚酞', icon: '🧪' },
+                    { id: 'caliper', name: '深度尺', icon: '📏' }
+                ];
+
+                const steps = [
+                    { name: '钻取孔洞', requiredTool: 'drill', guide: '拖动电锤到墙面钻孔' },
+                    { name: '清除粉末', requiredTool: 'blower', guide: '拖动洗耳球吹净粉末' },
+                    { name: '滴液显色', requiredTool: 'phenolphthalein', guide: '滴入酚酞指示剂' },
+                    { name: '测量读数', requiredTool: 'caliper', guide: '使用深度尺测量变色界限' }
+                ];
+
+                // 初始化 Canvas
+                onMounted(() => {
+                    const width = container.value.clientWidth;
+                    const height = container.value.clientHeight;
+
+                    stage = new Konva.Stage({
+                        container: 'konva-holder',
+                        width: width,
+                        height: height
+                    });
+
+                    layer = new Konva.Layer();
+                    stage.add(layer);
+
+                    // 绑定拖放事件到 Stage
+                    const stageContainer = stage.container();
+                    stageContainer.addEventListener('dragover', (e) => e.preventDefault());
+                    stageContainer.addEventListener('drop', onDrop);
+                    
+                    // 绑定点击事件到 Stage (支持点击式交互)
+                    stage.on('click tap', (e) => {
+                        // 如果是拖拽中的点击，忽略
+                        if (e.target.attrs.draggable) return;
+                        
+                        if (currentTool.value) {
+                             const pos = stage.getPointerPosition();
+                             handleToolAction(currentTool.value, pos);
+                        }
+                    });
+                });
+
+                const onDragStart = (toolId) => {
+                    currentTool.value = toolId;
+                };
+
+                const selectTool = (toolId) => {
+                    currentTool.value = currentTool.value === toolId ? null : toolId;
+                    // Change cursor
+                    stage.container().style.cursor = currentTool.value ? 'copy' : 'default';
+                };
+
+                const onDrop = (e) => {
+                    e.preventDefault();
+                    stage.setPointersPositions(e);
+                    const pos = stage.getPointerPosition();
+                    
+                    handleToolAction(currentTool.value, pos);
+                };
+
+                // 核心交互逻辑
+                const handleToolAction = (toolId, pos) => {
+                    if (!toolId) return;
+
+                    // 步骤校验
+                    if (toolId !== steps[currentStep.value].requiredTool) {
+                        alert(`当前步骤不需要使用 ${toolId === 'drill' ? '电锤' : toolId}。请使用: ${steps[currentStep.value].requiredTool}`);
+                        return;
+                    }
+
+                    switch(toolId) {
+                        case 'drill':
+                            performDrill(pos);
+                            break;
+                        case 'blower':
+                            performClean();
+                            break;
+                        case 'phenolphthalein':
+                            performDrop();
+                            break;
+                        case 'caliper':
+                            activateCaliper();
+                            break;
+                    }
+                };
+
+                // 1. 钻孔逻辑
+                const performDrill = (pos) => {
+                    // 绘制孔洞 (初始为充满粉末的状态)
+                    holeGroup = new Konva.Group({ x: pos.x, y: pos.y });
+                    
+                    // 孔洞背景 (深灰色)
+                    const holeBg = new Konva.Circle({
+                        radius: 60,
+                        fill: '#333',
+                        stroke: '#111',
+                        strokeWidth: 2,
+                        shadowBlur: 10
+                    });
+
+                    // 粉末层 (浅灰色噪点)
+                    const powder = new Konva.Circle({
+                        radius: 55,
+                        fill: '#888',
+                        id: 'powder',
+                        opacity: 0.9
+                    });
+
+                    holeGroup.add(holeBg);
+                    holeGroup.add(powder);
+                    layer.add(holeGroup);
+                    
+                    // 简单动画模拟震动
+                    const anim = new Konva.Animation((frame) => {
+                        holeGroup.rotation(Math.sin(frame.time / 20) * 2);
+                    }, layer);
+                    anim.start();
+                    setTimeout(() => { anim.stop(); holeGroup.rotation(0); }, 1000);
+
+                    currentStep.value = 1; // 进阶到清孔
+                    currentTool.value = null; // 操作后取消选择
+                    stage.container().style.cursor = 'default';
+                };
+
+                // 2. 清孔逻辑
+                const performClean = () => {
+                    const powder = holeGroup.findOne('#powder');
+                    if (powder) {
+                        // 动画：粉末淡出
+                        const tween = new Konva.Tween({
+                            node: powder,
+                            opacity: 0,
+                            duration: 1,
+                            onFinish: () => powder.destroy()
+                        });
+                        tween.play();
+                        currentStep.value = 2; // 进阶到滴液
+                        currentTool.value = null;
+                        stage.container().style.cursor = 'default';
+                    }
+                };
+
+                // 3. 滴液显色逻辑 (核心仿真)
+                const performDrop = () => {
+                    // 模拟液体扩散
+                    const liquid = new Konva.Circle({
+                        radius: 0,
+                        fill: 'transparent',
+                        stroke: 'transparent'
+                    });
+                    holeGroup.add(liquid);
+
+                    // 绘制显色环：根据真值 (8.5mm)
+                    // 假设屏幕比例 1mm = 4px (放大显示)
+                    const pxDepth = TRUE_CARBONATION_DEPTH * 4; 
+                    const holeRadius = 60;
+                    
+                    // 未碳化区域 (紫红色中心)
+                    const uncarbonated = new Konva.Circle({
+                        radius: holeRadius - pxDepth, // 半径减去碳化深度
+                        fill: '#D500F9', // 酚酞紫
+                        opacity: 0,
+                        shadowBlur: 5,
+                        shadowColor: '#D500F9'
+                    });
+
+                    holeGroup.add(uncarbonated);
+
+                    // 动画：变色过程
+                    new Konva.Tween({
+                        node: uncarbonated,
+                        opacity: 0.8,
+                        duration: 2,
+                        easing: Konva.Easings.EaseInOut
+                    }).play();
+
+                    currentStep.value = 3; // 进阶到测量
+                    currentTool.value = null;
+                    stage.container().style.cursor = 'default';
+                };
+
+                // 4. 卡尺测量逻辑
+                const activateCaliper = () => {
+                    if (caliperGroup) return;
+
+                    // 绘制一个简单的游标卡尺
+                    caliperGroup = new Konva.Group({ 
+                        x: holeGroup.x() + 80, 
+                        y: holeGroup.y() - 100,
+                        draggable: true 
+                    });
+
+                    // 主尺身
+                    const body = new Konva.Rect({
+                        width: 40, height: 300,
+                        fill: '#silver',
+                        stroke: '#666',
+                        cornerRadius: 4
+                    });
+                    // 刻度线 (装饰)
+                    for(let i=0; i<30; i++) {
+                        const line = new Konva.Line({
+                            points: [0, i*10, i%5==0?20:10, i*10],
+                            stroke: '#333',
+                            strokeWidth: 1
+                        });
+                        body.add(line);
+                    }
+
+                    // 测深杆 (可动部件)
+                    const probe = new Konva.Rect({
+                        x: 15, y: 300,
+                        width: 4, height: 0, // 初始长度0
+                        fill: '#444',
+                        id: 'probe'
+                    });
+
+                    // 游标滑块 (拖动它改变测深杆长度)
+                    const slider = new Konva.Rect({
+                        x: -10, y: 280,
+                        width: 60, height: 40,
+                        fill: '#aaa',
+                        stroke: '#333',
+                        cornerRadius: 2,
+                        draggable: true,
+                        dragBoundFunc: function(pos) {
+                            // 限制只能在Y轴拖动
+                            const newY = Math.max(caliperGroup.y(), Math.min(caliperGroup.y() + 250, pos.y));
+                            return { x: this.getAbsolutePosition().x, y: newY };
+                        }
+                    });
+
+                    // 绑定拖动事件：计算深度
+                    slider.on('dragmove', () => {
+                        // 相对位移
+                        const dy = slider.y() - 280;
+                        // 更新测深杆长度
+                        probe.height(dy);
+                        // 更新读数 (像素 -> 毫米)
+                        const mm = (dy / 4).toFixed(1); // 假设 4px = 1mm
+                        measuredValue.value = mm > 0 ? mm : '0.0';
+                    });
+
+                    caliperGroup.add(body);
+                    caliperGroup.add(probe);
+                    caliperGroup.add(slider); // slider 在最上层
+                    layer.add(caliperGroup);
+                    
+                    currentTool.value = null;
+                    stage.container().style.cursor = 'default';
+                };
+
+                const submitResult = () => {
+                    const val = parseFloat(measuredValue.value);
+                    const diff = Math.abs(val - TRUE_CARBONATION_DEPTH);
+                    
+                    if (diff <= 0.5) {
+                        alert(`🎉 恭喜！读数准确。\n真值: ${TRUE_CARBONATION_DEPTH}mm\n你的读数: ${val}mm`);
+                    } else {
+                        alert(`❌ 偏差过大！\n真值: ${TRUE_CARBONATION_DEPTH}mm\n你的读数: ${val}mm\n请仔细对齐变色界限。`);
+                    }
+                };
+
+                return {
+                    tools,
+                    currentStep,
+                    currentTool,
+                    measuredValue,
+                    container,
+                    onDragStart,
+                    selectTool,
+                    submitResult,
+                    currentStepName: Vue.computed(() => steps[currentStep.value].name),
+                    showGuide: Vue.computed(() => true),
+                    guideText: Vue.computed(() => steps[currentStep.value].guide)
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
