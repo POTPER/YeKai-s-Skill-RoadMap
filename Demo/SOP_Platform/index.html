@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>土木工程检测实训平台 (SOP架构演示)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f0f2f5;
+        }
+
+        /* 左侧导航栏 (Task Selector) */
+        .sidebar {
+            width: 250px;
+            background-color: #001529;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+        }
+        .logo {
+            padding: 0 20px 20px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .menu-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+            color: rgba(255,255,255,0.65);
+        }
+        .menu-item:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.08);
+        }
+        .menu-item.active {
+            color: white;
+            background-color: #1890ff;
+            border-left-color: #fff;
+        }
+
+        /* 主体内容区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        /* 顶部信息栏 */
+        .header-bar {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        .standard-tag {
+            background: #e6f7ff;
+            color: #1890ff;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            border: 1px solid #91d5ff;
+        }
+
+        /* 流程步骤条 (Stepper) */
+        .stepper {
+            display: flex;
+            background: white;
+            padding: 20px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            margin-right: 30px;
+            color: #999;
+            position: relative;
+        }
+        .step-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid #999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            font-size: 12px;
+        }
+        .step.active { color: #333; font-weight: bold; }
+        .step.active .step-num { background: #1890ff; color: white; border-color: #1890ff; }
+        .step.finished { color: #1890ff; }
+        .step.finished .step-num { border-color: #1890ff; color: #1890ff; }
+
+        /* 工作区 (Workspace) - 动态加载不同组件 */
+        .workspace {
+            flex: 1;
+            background: white;
+            border-radius: 0 0 8px 8px;
+            padding: 25px;
+            position: relative;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 通用底部操作栏 */
+        .footer-actions {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+        }
+        button {
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #d9d9d9;
+            background: white;
+            transition: all 0.3s;
+        }
+        button.primary {
+            background: #1890ff;
+            color: white;
+            border-color: #1890ff;
+        }
+        button.primary:hover { background: #40a9ff; }
+        
+        /* ================= Crack Mapper Styles ================= */
+        .crack-workspace {
+            display: flex;
+            gap: 20px;
+            height: 400px;
+        }
+        .crack-toolbar {
+            width: 150px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .tool-btn {
+            padding: 10px;
+            background: white;
+            border: 1px solid #d9d9d9;
+            cursor: pointer;
+            text-align: left;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        .tool-btn:hover { border-color: #1890ff; color: #1890ff; }
+        .tool-btn.active { background: #e6f7ff; border-color: #1890ff; color: #1890ff; font-weight: bold; }
+        
+        .drawing-board {
+            flex: 1;
+            background: #fff;
+            border: 2px solid #eee;
+            position: relative;
+            cursor: crosshair;
+            background-image: linear-gradient(#f0f0f0 1px, transparent 1px), linear-gradient(90deg, #f0f0f0 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .crack-path {
+            fill: none;
+            stroke: #ff4d4f;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .crack-point {
+            fill: #1890ff;
+            stroke: white;
+            stroke-width: 2;
+        }
+
+        /* ================= Rebound Hammer Styles ================= */
+        .rebound-container {
+            display: flex;
+            gap: 30px;
+            height: 450px;
+            align-items: flex-start;
+        }
+        /* 左侧：网格选择区 */
+        .grid-wall {
+            width: 300px;
+            height: 300px;
+            background: #e6f7ff;
+            border: 4px solid #91d5ff;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 2px;
+            position: relative;
+        }
+        .grid-zone {
+            background: rgba(255,255,255,0.5);
+            border: 1px dashed #1890ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            color: #1890ff;
+        }
+        .grid-zone:hover { background: #bae7ff; }
+        .grid-zone.selected { background: #1890ff; color: white; border-style: solid; }
+        
+        /* 右侧：回弹仪操作区 */
+        .hammer-panel {
+            flex: 1;
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .hammer-body {
+            width: 60px;
+            height: 250px;
+            background: linear-gradient(90deg, #595959, #262626);
+            border-radius: 30px 30px 5px 5px;
+            position: relative;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            transition: transform 0.1s;
+        }
+        .hammer-body.active { transform: translateY(10px); }
+        .hammer-scale {
+            width: 10px;
+            height: 150px;
+            background: #fff;
+            position: absolute;
+            top: 50px;
+            left: 25px;
+            border-radius: 2px;
+        }
+        .hammer-pointer {
+            width: 14px;
+            height: 4px;
+            background: red;
+            position: absolute;
+            left: -2px;
+            top: 140px; /* 初始位置 */
+            transition: top 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .hammer-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            background: #faad14;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #d48806;
+            transition: all 0.1s;
+        }
+        .hammer-button:active { transform: translateY(4px); box-shadow: none; }
+        .hammer-button:disabled { background: #d9d9d9; box-shadow: none; cursor: not-allowed; }
+        
+        .data-log {
+            margin-top: 15px;
+            width: 100%;
+            background: #fff;
+            border: 1px solid #eee;
+            padding: 10px;
+            height: 100px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+
+        .memory-spot {
+            position: absolute;
+            width: 30px; height: 30px;
+            background: rgba(255,0,0,0.2);
+            border: 2px solid red;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% {transform:scale(1);} 50% {transform:scale(1.2);} 100% {transform:scale(1);} }
+        .tag { display: inline-block; background: #e6f7ff; color: #1890ff; padding: 2px 8px; margin-right: 5px; border-radius: 4px; font-size: 12px; }
+
+        /* ================= Agent Builder Styles ================= */
+        .builder-layout {
+            display: flex;
+            height: 500px;
+            gap: 20px;
+            background: #f0f2f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .component-library {
+            width: 200px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .comp-item {
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .comp-item:hover { border-color: #1890ff; color: #1890ff; }
+        .comp-icon { margin-right: 8px; font-size: 16px; }
+        
+        .robot-canvas {
+            flex: 1;
+            background: #e6f7ff;
+            border: 2px dashed #91d5ff;
+            border-radius: 8px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .robot-core {
+            width: 300px;
+            height: 400px;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 20px;
+            position: relative;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .slot-area {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #fafafa;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+            min-height: 60px;
+        }
+        .slot-title { font-size: 12px; color: #999; margin-bottom: 5px; font-weight: bold; }
+        .installed-comp {
+            background: #e6f7ff;
+            border: 1px solid #1890ff;
+            color: #1890ff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .remove-btn { cursor: pointer; font-weight: bold; }
+
+        /* ================= SOP Editor Styles ================= */
+        .sop-editor {
+            display: flex;
+            height: 500px;
+            gap: 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+        }
+        .flow-node-palette {
+            width: 180px;
+            background: #f9f9f9;
+            padding: 15px;
+            border-right: 1px solid #eee;
+        }
+        .flow-canvas {
+            flex: 1;
+            background-image: radial-gradient(#ddd 1px, transparent 1px);
+            background-size: 20px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .flow-node {
+            position: absolute;
+            padding: 10px 15px;
+            background: white;
+            border: 2px solid #1890ff;
+            border-radius: 4px;
+            cursor: move;
+            font-size: 13px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            min-width: 100px;
+            text-align: center;
+        }
+        .flow-node.condition {
+            border-color: #faad14;
+            background: #fffbe6;
+            border-radius: 20px;
+        }
+        .flow-node.action {
+            border-color: #52c41a;
+            background: #f6ffed;
+        }
+        .flow-line {
+            position: absolute;
+            height: 2px;
+            background: #999;
+            transform-origin: 0 50%;
+            pointer-events: none;
+        }
+        
+        /* ================= Photo Viewer Styles ================= */
+        .photo-viewer {
+            display: flex;
+            gap: 20px;
+            height: 400px;
+        }
+        .photo-main {
+            flex: 1;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .photo-main img { max-width: 100%; max-height: 100%; }
+        .photo-info {
+            width: 250px;
+            padding: 15px;
+            background: #fafafa;
+            border-left: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .info-row { font-size: 13px; color: #666; display: flex; justify-content: space-between; }
+        .info-val { color: #333; font-weight: bold; }
+        .defect-tag { display: inline-block; padding: 2px 8px; background: #fff1f0; color: #f5222d; border: 1px solid #ffa39e; border-radius: 4px; font-size: 12px; margin-right: 5px; cursor: pointer; }
+
+        /* ================= Data Form Styles ================= */
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+        .form-input { width: 100%; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px; box-sizing: border-box; }
+        .form-select { width: 100%; padding: 8px; border: 1px solid #d9d9d9; border-radius: 4px; }
+        .calc-result { background: #f6ffed; border: 1px solid #b7eb8f; padding: 15px; border-radius: 4px; margin-top: 20px; display: none; }
+
+        /* ================= Quiz Styles ================= */
+        .quiz-container { max-width: 700px; margin: 0 auto; }
+        .quiz-option { 
+            padding: 15px; border: 1px solid #e8e8e8; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center;
+        }
+        .quiz-option:hover { border-color: #1890ff; background: #e6f7ff; }
+        .quiz-option.selected { border-color: #1890ff; background: #e6f7ff; font-weight: bold; }
+        .quiz-feedback { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; }
+        .quiz-feedback.success { background: #f6ffed; color: #52c41a; }
+        .quiz-feedback.error { background: #fff1f0; color: #f5222d; }
+
+        /* Host Device (Screen) */
+        .scanner-device {
+            width: 250px;
+            background: #222;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 4px 10px rgba(0,0,0,0.3);
+        }
+        .device-screen {
+            background: #000;
+            border: 2px solid #444;
+            border-radius: 4px;
+            height: 200px;
+            position: relative;
+            overflow: hidden;
+            font-family: 'Consolas', monospace;
+        }
+        .signal-bar-container {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 30px;
+            height: 150px;
+            background: #111;
+            border: 1px solid #333;
+        }
+        .signal-bar-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to top, #0f0, #ff0, #f00);
+            transition: height 0.1s;
+        }
+        .screen-value {
+            position: absolute;
+            top: 20px;
+            right: 10px;
+            color: #0f0;
+            font-size: 32px;
+            text-align: right;
+        }
+        .screen-unit {
+            font-size: 14px;
+            color: #666;
+        }
+        .screen-label {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #aaa;
+            font-size: 12px;
+        }
+        .device-controls {
+            margin-top: auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .device-btn {
+            background: #444;
+            border: none;
+            color: #ddd;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .device-btn:active { background: #666; }
+        
+        /* Wall & Probe Area */
+        .wall-surface {
+            flex: 1;
+            background-color: #e8e8e8;
+            background-image: radial-gradient(#ccc 1px, transparent 1px);
+            background-size: 20px 20px;
+            border: 4px solid #999;
+            position: relative;
+            cursor: crosshair;
+            overflow: hidden;
+        }
+        .probe {
+            width: 60px;
+            height: 100px;
+            background: #1890ff;
+            border-radius: 6px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 2px 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            pointer-events: none; /* Let clicks pass through to wall */
+            z-index: 10;
+        }
+        .probe::after {
+            content: '';
+            width: 2px;
+            height: 100%;
+            background: rgba(255,255,255,0.3);
+            position: absolute;
+        }
+        .probe::before {
+            content: '';
+            width: 100%;
+            height: 2px;
+            background: rgba(255,255,255,0.3);
+            position: absolute;
+        }
+        .scan-mark {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background: red;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .hidden-rebar {
+            position: absolute;
+            background: rgba(0,0,0,0.05); /* Usually invisible, visible for debug */
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 左侧菜单：模拟选择不同的检测任务 -->
+    <div class="sidebar">
+        <div class="logo">📐 土木检测实训平台</div>
+        <div class="menu-item active" onclick="loadTask('agent_training_01')">
+            0. 智能体构建实训 (Agent)
+        </div>
+        <div class="menu-item" onclick="loadTask('assessment_01')">
+            1. 砌体安全性鉴定 (业务)
+        </div>
+        <div class="menu-item" data-task="strength_01" onclick="loadTask('strength_01')">
+            2. 混凝土回弹检测 (技术)
+        </div>
+        <div class="menu-item" data-task="rebar_01" onclick="loadTask('rebar_01')">
+            3. 钢筋保护层检测 (技术)
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:20px; padding-top:10px;">
+            <div style="padding:0 20px; color:#999; font-size:12px;">技术工具库</div>
+            <div class="menu-item" data-task="insp_crack" onclick="loadTask('insp_crack')" style="font-size:13px;">• 裂缝检测技术</div>
+            <div class="menu-item" data-task="insp_settlement" onclick="loadTask('insp_settlement')" style="font-size:13px;">• 沉降监测技术</div>
+        </div>
+    </div>
+
+    <!-- 主体区域 -->
+    <div class="main-content">
+        <!-- 1. 头部信息 (动态渲染) -->
+        <div class="header-bar">
+            <div>
+                <div class="task-title" id="task-title">任务标题加载中...</div>
+                <div style="color:#999; font-size:12px; margin-top:5px;">任务ID: <span id="task-id">-</span></div>
+            </div>
+            <div class="standard-tag" id="standard-ref">标准加载中...</div>
+        </div>
+
+        <!-- 2. 步骤条 (动态渲染) -->
+        <div class="stepper" id="stepper-container">
+            <!-- 步骤会通过 JS 动态插入 -->
+        </div>
+
+        <!-- 3. 工作区 (加载具体组件) -->
+        <div class="workspace" id="workspace">
+            <div class="component-box">请选择左侧任务以开始...</div>
+        </div>
+    </div>
+
+    <script>
+        // === 模拟后端数据库 (Config Data) ===
+        // 这里对应文档中的 config.json
+        const TaskDatabase = {
+            // === 智能体构建实训 (Agent Building) ===
+            "agent_training_01": {
+                title: "实训任务：训练 AI 完成沉降鉴定",
+                standard: "JGJ 125-2016",
+                steps: [
+                    { id: 1, name: "1. 线索收集 (Memory)", component: "MemoryCollector", props: {} },
+                    { id: 2, name: "2. 规则注入 (Brain)", component: "BrainTrainer", props: {} },
+                    { id: 3, name: "3. 工具调试 (Tools)", component: "ToolWorkshop", props: {} },
+                    { id: 4, name: "4. SOP编排 (Planning)", component: "SOPEditor", props: {} },
+                    { id: 5, name: "5. 实战验收 (Run)", component: "AgentSimulation", props: { 
+                        scenarios: [{ name: "目标建筑：3号楼", difficulty: 5 }]
+                    }}
+                ]
+            },
+
+            // === 业务流 (Business Workflows) ===
+            "assessment_01": {
+                title: "砌体结构沉降裂缝安全性鉴定 (业务流)",
+                standard: "GB 50292 / JGJ 125",
+                steps: [
+                    { 
+                        id: 1, 
+                        name: "初步调查", 
+                        component: "Investigation", 
+                        props: { 
+                            docs: [
+                                { title: "任务委托书", type: "text", content: "委托方：某小区业主委员会<br>委托事项：3号楼东单元墙体开裂原因分析及安全性评估" },
+                                { title: "历史资料", type: "text", content: "该房屋建于1998年，条形基础。近期东侧15m处有深基坑施工。" }
+                            ] 
+                        } 
+                    },
+                    { 
+                        id: 2, 
+                        name: "专项检测：裂缝", 
+                        component: "SubTaskLauncher", // [新组件] 子任务启动器
+                        props: { 
+                            sub_task_id: "insp_crack", 
+                            title: "启动《裂缝专项检测》",
+                            desc: "请使用裂缝测宽仪对主要受力裂缝进行普查与精测。"
+                        } 
+                    },
+                    { 
+                        id: 3, 
+                        name: "专项检测：沉降", 
+                        component: "SubTaskLauncher", 
+                        props: { 
+                            sub_task_id: "insp_settlement", 
+                            title: "启动《沉降变形监测》",
+                            desc: "请使用水准仪或全站仪，测量房屋角点沉降差及倾斜率。"
+                        } 
+                    },
+                    { 
+                        id: 4, 
+                        name: "综合评级", 
+                        component: "ConclusionReport", 
+                        props: { type: "assessment_report" } 
+                    }
+                ]
+            },
+
+            // === 技术流 (Technical Inspections) ===
+            "insp_crack": {
+                title: "专项检测：裂缝观测技术",
+                standard: "GB/T 50344",
+                steps: [
+                    { id: 1, name: "裂缝普查", component: "CrackMapper", props: { tool: "pen" } },
+                    { id: 2, name: "宽度精测", component: "CrackMicroscope", props: { target_width: 12.4 } }
+                ]
+            },
+            
+            "insp_settlement": {
+                title: "专项检测：建筑物沉降/倾斜观测",
+                standard: "JGJ 8-2016",
+                steps: [
+                    { id: 1, name: "基准点布设", component: "GridSelector", props: { min: 3, type: "benchmark" } },
+                    { id: 2, name: "倾斜测量", component: "TiltMeasurement", props: { target_tilt: 1.2 } }
+                ]
+            },
+
+            // === 其他旧任务保留 ===
+            "strength_01": {
+                title: "回弹法检测混凝土抗压强度",
+                standard: "JGJ/T 23-2011",
+                steps: [
+                    { id: 0, name: "仪器率定", component: "ParamSetup", props: { mode: "calibration" } }, // 新增步骤
+                    { id: 1, name: "测区布置", component: "GridSelector", props: { min: 10 } },
+                    { id: 2, name: "回弹操作", component: "ReboundHammerSim", props: { angle: 0 } },
+                    { id: 3, name: "数据计算", component: "DataForm", props: { formula: "strength" } },
+                    { id: 4, name: "报告生成", component: "PhotoViewer", props: { type: "report_preview" } } // 复用图片查看器作为报告预览
+                ]
+            },
+            "rebar_01": {
+                title: "钢筋保护层厚度检测",
+                standard: "GB 50204-2015",
+                steps: [
+                    { id: 1, name: "参数设置", component: "ParamSetup", props: { diameter: 12 } },
+                    { id: 2, name: "扫描定位", component: "Scanner", props: { wall_id: "A1" } }, // 核心组件
+                    { id: 3, name: "钻孔验证", component: "DrillSim", props: { depth: 30 } }
+                ]
+            }
+        };
+
+        // === 核心引擎 (Core Engine) ===
+        let currentTask = null;
+        let currentTaskId = null;
+        let currentStepIndex = 0;
+
+        const taskStack = [];
+
+        // 1. 加载任务 (Load Task)
+        function loadTask(taskId, options) {
+            const opts = options || {};
+
+            if (!opts || !opts.mode || opts.mode === 'root') {
+                taskStack.length = 0;
+            } else if (opts.mode === 'subtask') {
+                if (currentTaskId) {
+                    taskStack.push({ taskId: currentTaskId, stepIndex: currentStepIndex });
+                }
+            }
+
+            // 更新菜单高亮
+            document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+            const activeEl = document.querySelector(`.menu-item[data-task="${taskId}"]`);
+            if (activeEl) activeEl.classList.add('active');
+
+            // 获取配置
+            const config = TaskDatabase[taskId];
+            if (!config) {
+                alert(`未找到任务配置: ${taskId}`);
+                return;
+            }
+            currentTaskId = taskId;
+            currentTask = config;
+            currentStepIndex = Number.isInteger(opts.stepIndex) ? opts.stepIndex : 0;
+
+            // 渲染头部
+            document.getElementById('task-title').innerText = config.title;
+            document.getElementById('task-id').innerText = taskId;
+            document.getElementById('standard-ref').innerText = "依据: " + config.standard;
+
+            // 渲染步骤条
+            renderStepper();
+
+            // 渲染第一步的内容
+            renderStepContent();
+        }
+
+        // 2. 渲染步骤条
+        function renderStepper() {
+            const container = document.getElementById('stepper-container');
+            container.innerHTML = '';
+            
+            currentTask.steps.forEach((step, index) => {
+                const stepEl = document.createElement('div');
+                // [修改] 允许点击任意步骤跳转 (非线性导航)
+                stepEl.className = `step ${index === currentStepIndex ? 'active' : ''} ${index < currentStepIndex ? 'finished' : ''}`;
+                stepEl.style.cursor = 'pointer'; 
+                stepEl.onclick = () => {
+                    // 简单的跳转逻辑
+                    currentStepIndex = index;
+                    renderStepper();
+                    renderStepContent();
+                };
+                
+                stepEl.innerHTML = `
+                    <div class="step-num">${index + 1}</div>
+                    <div class="step-name">${step.name}</div>
+                `;
+                container.appendChild(stepEl);
+            });
+        }
+
+        // 3. 渲染工作区 (Component Factory)
+        function renderStepContent() {
+            const workspace = document.getElementById('workspace');
+            const stepConfig = currentTask.steps[currentStepIndex];
+            
+            // 这是一个简单的“组件工厂”，根据 component 字段返回不同的 HTML
+            let componentHTML = '';
+            
+            switch(stepConfig.component) {
+                case 'MemoryCollector':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (现场线索收集)</h3>
+                        <p>请点击场景中的关键要素，为智能体构建“短期记忆”。</p>
+                        <div style="position:relative; height:400px; background:#f0f0f0; border:2px solid #ccc; overflow:hidden;">
+                            <!-- 模拟现场图 -->
+                            <img src="data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400">
+                                <rect width="800" height="400" fill="#e6f7ff"/>
+                                <rect x="100" y="100" width="300" height="250" fill="#fff" stroke="#333" stroke-width="4"/>
+                                <path d="M120,320 L180,250" stroke="red" stroke-width="3"/>
+                                <text x="130" y="340" fill="red" font-size="12">裂缝</text>
+                                <rect x="500" y="150" width="200" height="100" fill="#8c8c8c"/>
+                                <text x="550" y="200" fill="white">深基坑施工</text>
+                            </svg>`)}" style="width:100%; height:100%; object-fit:cover;">
+                            
+                            <!-- 交互热点 -->
+                            <div class="memory-spot" style="top:250px; left:120px;" onclick="collectMemory('crack', '发现底层窗角倒八字裂缝')">📍</div>
+                            <div class="memory-spot" style="top:150px; left:500px;" onclick="collectMemory('env', '东侧15m处有深基坑')">📍</div>
+                        </div>
+                        <div id="memory-list" style="margin-top:10px; padding:10px; background:#fff; border:1px dashed #999;">
+                            <b>🧠 已收集记忆:</b> <span id="mem-count">0</span>/2
+                        </div>
+                    `;
+                    setTimeout(() => window.collectMemory = (type, content) => {
+                        if(!window.agentMemory) window.agentMemory = [];
+                        if(!window.agentMemory.includes(content)) {
+                            window.agentMemory.push(content);
+                            document.getElementById('memory-list').innerHTML += `<div class="tag">${content}</div>`;
+                            document.getElementById('mem-count').innerText = window.agentMemory.length;
+                        }
+                    }, 100);
+                    break;
+
+                case 'BrainTrainer':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (大脑规则注入)</h3>
+                        <p>请根据 JGJ 125 规范，定义智能体的判定逻辑。</p>
+                        <div class="form-container">
+                            <div class="form-group">
+                                <label class="form-label">规则 1: 沉降成因判定</label>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    IF 裂缝形态 == 
+                                    <select class="form-select" style="width:120px;" id="rule-shape">
+                                        <option value="v">竖向</option>
+                                        <option value="inv_8">倒八字</option>
+                                    </select> 
+                                    THEN 成因 = 沉降
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">规则 2: 危房等级判定 (D级)</label>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    IF 裂缝宽度 > <input type="number" id="rule-width" class="form-input" style="width:60px;" value="10"> mm
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px; margin-top:5px;">
+                                    AND 倾斜率 > <input type="number" id="rule-tilt" class="form-input" style="width:60px;" value="1.0"> %
+                                </div>
+                            </div>
+                            <button class="primary" onclick="saveBrainRules()">注入规则</button>
+                        </div>
+                    `;
+                    setTimeout(() => window.saveBrainRules = () => {
+                        window.brainRules = {
+                            shape: document.getElementById('rule-shape').value,
+                            width: document.getElementById('rule-width').value,
+                            tilt: document.getElementById('rule-tilt').value
+                        };
+                        alert("规则已注入大脑！");
+                        nextStep();
+                    }, 100);
+                    break;
+
+                case 'ToolWorkshop':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (工具调试车间)</h3>
+                        <div style="display:flex; gap:20px;">
+                            <div class="comp-item" style="flex:1; display:block; text-align:center; padding:20px;">
+                                <div style="font-size:40px;">📏</div>
+                                <h4>裂缝测宽仪</h4>
+                                <p style="font-size:12px; color:#666;">状态: ${window.toolLicenses?.crack ? '✅ 已调试' : '❌ 未调试'}</p>
+                                <button onclick="debugTool('crack_01')" ${window.toolLicenses?.crack ? 'disabled' : ''}>进入调试台</button>
+                            </div>
+                            <div class="comp-item" style="flex:1; display:block; text-align:center; padding:20px;">
+                                <div style="font-size:40px;">🔭</div>
+                                <h4>全站仪 (测倾斜)</h4>
+                                <p style="font-size:12px; color:#666;">状态: ${window.toolLicenses?.tilt ? '✅ 已调试' : '❌ 未调试'}</p>
+                                <button onclick="debugTool('tilt_sim')">进入调试台</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px; text-align:right;">
+                            <button class="primary" onclick="finishTools()">完成调试，进入编排</button>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        window.debugTool = (tid) => {
+                            if(tid === 'crack_01') loadTask('crack_01'); // 复用现有任务
+                            else alert("全站仪调试台建设中..."); 
+                        };
+                        window.finishTools = () => nextStep();
+                    }, 100);
+                    break;
+
+                case 'AgentConfig':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (智能体构建工厂)</h3>
+                        <p>请从左侧组件库中拖拽模块，组装你的检测机器人。</p>
+                        
+                        <div class="builder-layout">
+                            <!-- 1. 组件库 -->
+                            <div class="component-library">
+                                <div style="font-weight:bold; margin-bottom:10px;">🧩 核心模组</div>
+                                <div class="comp-item" draggable="true" ondragstart="drag(event, 'core-brain-v1')"><span class="comp-icon">🧠</span> 通用决策大脑</div>
+                                
+                                <div style="font-weight:bold; margin:15px 0 10px 0;">🛠️ 感知工具</div>
+                                
+                                <!-- 回弹仪：移除锁，允许自由拖拽 -->
+                                <div class="comp-item" draggable="true" ondragstart="drag(event, 'tool-hammer')"><span class="comp-icon">🔨</span> 数字回弹仪</div>
+                                
+                                <div class="comp-item" draggable="true" ondragstart="drag(event, 'tool-carbon')"><span class="comp-icon">📏</span> 碳化深度尺</div>
+                                
+                                <div style="font-weight:bold; margin:15px 0 10px 0;">📚 知识库</div>
+                                <div class="comp-item" draggable="true" ondragstart="drag(event, 'kb-jgj23')"><span class="comp-icon">📖</span> JGJ/T 23-2011</div>
+                            </div>
+                            
+                            <!-- 2. 组装台 -->
+                            <div class="robot-canvas" ondrop="drop(event)" ondragover="allowDrop(event)">
+                                <div class="robot-core">
+                                    <div style="text-align:center; font-weight:bold; margin-bottom:20px;">🤖 Agent X-100</div>
+                                    
+                                    <!-- 插槽区域 -->
+                                    <div class="slot-area" id="slot-brain" ondrop="dropInSlot(event, 'brain')" ondragover="allowDrop(event)">
+                                        <div class="slot-title">🧠 大脑插槽 (必填)</div>
+                                        <div id="installed-brain" style="display:none; flex-direction:column;" class="installed-comp">
+                                            <div style="display:flex; justify-content:space-between; width:100%;">
+                                                <span id="brain-name"></span> <span class="remove-btn" onclick="removeComp('brain')">x</span>
+                                            </div>
+                                            <!-- [新增] 大脑微调面板 -->
+                                            <div style="margin-top:10px; padding:10px; background:white; border-radius:4px; font-size:11px; color:#666;">
+                                                <div style="margin-bottom:5px; font-weight:bold;">⚙️ 判据参数微调 (JGJ 125)</div>
+                                                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                                                    <span>危房裂缝阈值:</span>
+                                                    <input type="number" id="brain-crack-limit" value="5" style="width:40px;"> mm
+                                                </div>
+                                                <div style="display:flex; justify-content:space-between;">
+                                                    <span>危房倾斜阈值:</span>
+                                                    <input type="number" id="brain-tilt-limit" value="0.5" style="width:40px;"> %
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="slot-area" id="slot-tools" ondrop="dropInSlot(event, 'tools')" ondragover="allowDrop(event)">
+                                        <div class="slot-title">🛠️ 工具插槽 (多选)</div>
+                                        <div id="installed-tools-list"></div>
+                                    </div>
+                                    
+                                    <div class="slot-area" id="slot-kb" ondrop="dropInSlot(event, 'kb')" ondragover="allowDrop(event)">
+                                        <div class="slot-title">📚 知识挂载 (可选)</div>
+                                        <div id="installed-kb-list"></div>
+                                    </div>
+                                </div>
+                                <div style="margin-top:20px; color:#666; font-size:12px;">* 将左侧组件拖入对应插槽</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top:20px; text-align:right;">
+                            <button class="primary" onclick="saveAgentBuild()">保存并激活智能体</button>
+                        </div>
+                    `;
+                    
+                    // 注入拖拽逻辑
+                    setTimeout(() => {
+                        window.agentBuildState = { brain: null, tools: [], kb: [] };
+                        
+                        window.allowDrop = (ev) => ev.preventDefault();
+                        
+                        window.drag = (ev, id) => {
+                            ev.dataTransfer.setData("comp_id", id);
+                            ev.dataTransfer.setData("comp_text", ev.target.innerText);
+                        };
+                        
+                        window.dropInSlot = (ev, slotType) => {
+                            ev.preventDefault();
+                            ev.stopPropagation(); // 防止冒泡
+                            const id = ev.dataTransfer.getData("comp_id");
+                            const text = ev.dataTransfer.getData("comp_text");
+                            
+                            // 简单的类型检查
+                            if(slotType === 'brain' && !id.includes('brain')) return alert("请放入大脑组件！");
+                            if(slotType === 'tools' && !id.includes('tool')) return alert("请放入工具组件！");
+                            if(slotType === 'kb' && !id.includes('kb')) return alert("请放入知识库组件！");
+                            
+                            // 更新状态与UI
+                            if(slotType === 'brain') {
+                                window.agentBuildState.brain = id;
+                                document.getElementById('brain-name').innerText = text;
+                                document.getElementById('installed-brain').style.display = 'flex';
+                            } else {
+                                const listId = `installed-${slotType}-list`;
+                                const list = window.agentBuildState[slotType];
+                                if(!list.includes(id)) {
+                                    list.push(id);
+                                    const div = document.createElement('div');
+                                    div.className = 'installed-comp';
+                                    div.innerHTML = `<span>${text}</span> <span class="remove-btn" onclick="removeComp('${slotType}', '${id}', this)">x</span>`;
+                                    document.getElementById(listId).appendChild(div);
+                                }
+                            }
+                        };
+                        
+                        window.removeComp = (slotType, id, el) => {
+                            if(slotType === 'brain') {
+                                window.agentBuildState.brain = null;
+                                document.getElementById('installed-brain').style.display = 'none';
+                            } else {
+                                const list = window.agentBuildState[slotType];
+                                const idx = list.indexOf(id);
+                                if(idx > -1) list.splice(idx, 1);
+                                el.parentNode.remove();
+                            }
+                        };
+                        
+                        window.saveAgentBuild = () => {
+                            const s = window.agentBuildState;
+                            if(!s.brain) return alert("❌ 启动失败：缺少大脑核心！");
+                            if(s.tools.length === 0) return alert("❌ 启动失败：未装备任何检测工具！");
+                            
+                            // 获取微调参数
+                            const crackLimit = parseFloat(document.getElementById('brain-crack-limit').value);
+                            const tiltLimit = parseFloat(document.getElementById('brain-tilt-limit').value);
+                            
+                            // 校验参数是否符合规范 (JGJ 125: 10mm, 1%)
+                            // 这里不阻止，留给 Step 3 去报错，让学生在失败中学习
+                            
+                            window.agentConfig = {
+                                sample_count: 16,
+                                surface_correction: s.tools.includes('tool-hammer'), 
+                                carbon_depth: s.tools.includes('tool-carbon') ? 'real_time_measure' : 'none',
+                                // 新增大脑参数
+                                brain_params: { crackLimit, tiltLimit }
+                            };
+                            
+                            alert(`✅ 智能体构建成功！\n大脑参数已注入: 裂缝>${crackLimit}mm, 倾斜>${tiltLimit}%`);
+                            nextStep();
+                        };
+                    }, 100);
+                    break;
+
+                case 'SOPEditor':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (SOP流程编排)</h3>
+                        <p>请拖拽节点定义检测逻辑。必须包含：开始 -> (动作) -> 结束。</p>
+                        
+                        <div class="sop-editor">
+                            <!-- 左侧节点库 -->
+                            <div class="flow-node-palette">
+                                <div style="font-weight:bold; margin-bottom:10px;">流程节点</div>
+                                <div class="comp-item" draggable="true" ondragstart="dragNode(event, 'start', '🟢 开始')">🟢 开始</div>
+                                <div class="comp-item" draggable="true" ondragstart="dragNode(event, 'action_rebound', '🔨 回弹检测')">🔨 回弹检测</div>
+                                <div class="comp-item" draggable="true" ondragstart="dragNode(event, 'action_carbon', '📏 碳化检测')">📏 碳化检测</div>
+                                <div class="comp-item" draggable="true" ondragstart="dragNode(event, 'decision_brain', '🧠 智能研判')">🧠 智能研判 (Call Brain)</div>
+                                <div class="comp-item" draggable="true" ondragstart="dragNode(event, 'end', '🔴 结束')">🔴 结束</div>
+                            </div>
+                            
+                            <!-- 右侧画布 -->
+                            <div class="flow-canvas" id="flow-canvas" ondrop="dropNode(event)" ondragover="allowDrop(event)">
+                                <!-- 预置一个开始节点 -->
+                                <div class="flow-node" style="top:50px; left:50px;" id="node-start">🟢 开始</div>
+                                <div style="position:absolute; bottom:10px; right:10px; font-size:12px; color:#999;">
+                                    * 提示：拖入 [智能研判] 节点，将自动调用 Step 1 训练的大脑参数。
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top:20px; text-align:right;">
+                            <button class="primary" onclick="saveSOP()">保存流程并进入测试</button>
+                        </div>
+                    `;
+                    
+                    // 注入逻辑
+                    setTimeout(() => {
+                        window.sopNodes = [{id: 'start', type: 'start', x: 50, y: 50}];
+                        
+                        window.dragNode = (ev, type, text) => {
+                            ev.dataTransfer.setData("type", type);
+                            ev.dataTransfer.setData("text", text);
+                        };
+                        
+                        window.dropNode = (ev) => {
+                            ev.preventDefault();
+                            const type = ev.dataTransfer.getData("type");
+                            const text = ev.dataTransfer.getData("text");
+                            const rect = document.getElementById('flow-canvas').getBoundingClientRect();
+                            const x = ev.clientX - rect.left;
+                            const y = ev.clientY - rect.top;
+                            
+                            const div = document.createElement('div');
+                            div.className = `flow-node ${type.includes('decision')?'condition':''} ${type.includes('action')?'action':''}`;
+                            div.style.left = x + 'px';
+                            div.style.top = y + 'px';
+                            div.innerText = text;
+                            
+                            // 简单的连线模拟 (画一条线连到上一个节点)
+                            if(window.sopNodes.length > 0) {
+                                const last = window.sopNodes[window.sopNodes.length-1];
+                                drawLine(last.x, last.y, x, y);
+                            }
+                            
+                            document.getElementById('flow-canvas').appendChild(div);
+                            window.sopNodes.push({id: type, type: type, x: x, y: y});
+                        };
+                        
+                        window.drawLine = (x1, y1, x2, y2) => {
+                            const length = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+                            const angle = Math.atan2(y2-y1, x2-x1) * 180 / Math.PI;
+                            const line = document.createElement('div');
+                            line.className = 'flow-line';
+                            line.style.width = length + 'px';
+                            line.style.left = (x1 + 50) + 'px'; // +50 是节点半宽
+                            line.style.top = (y1 + 20) + 'px';
+                            line.style.transform = `rotate(${angle}deg)`;
+                            document.getElementById('flow-canvas').appendChild(line);
+                        };
+                        
+                        window.saveSOP = () => {
+                            // 1. 检查逻辑完整性
+                            const hasRebound = window.sopNodes.some(n => n.type === 'action_rebound');
+                            const hasCarbon = window.sopNodes.some(n => n.type === 'action_carbon');
+                            const hasBrain = window.sopNodes.some(n => n.type === 'decision_brain');
+                            
+                            if(!hasBrain) {
+                                alert("❌ 流程错误：你收集了数据，但没有调用 [🧠 智能研判] 节点进行分析！\n\n请在流程末尾加入该节点，让大脑发挥作用。");
+                                return;
+                            }
+                            
+                            if(!hasCarbon) {
+                                if(!confirm("⚠️ 警告：你的流程中缺少 [碳化检测] 环节！\n在面对老旧建筑时可能会出现重大误判。\n确定要继续吗？")) return;
+                            }
+                            
+                            // 2. [新增] 检查工具授权状态 (JIT Validation)
+                            if(hasRebound) {
+                                if (!window.toolLicenses || !window.toolLicenses.hammer) {
+                                    if(confirm("⛔ 流程阻断：\n你的SOP中包含 [回弹检测] 节点，但智能体尚未获得该工具的操作授权。\n\n需要立即前往《混凝土回弹检测》考取执照吗？")) {
+                                        loadTask('strength_01');
+                                    }
+                                    return; // 阻止保存
+                                }
+                            }
+
+                            // 3. 更新 agentConfig
+                            if(window.agentConfig) {
+                                window.agentConfig.carbon_depth = hasCarbon ? 'real_time_measure' : 'none';
+                            }
+                            
+                            alert("SOP 流程已保存！智能体逻辑已更新。");
+                            nextStep();
+                        };
+                    }, 100);
+                    break;
+
+                case 'AgentSimulation':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (压力测试演练场)</h3>
+                        <div style="display:flex; gap:20px;">
+                            <div style="width:200px; background:#f5f5f5; padding:15px;">
+                                <h4>测试场景库</h4>
+                                ${stepConfig.props.scenarios.map((s,i) => `
+                                    <div class="scenario-card" id="scen-${i}" style="padding:10px; border:1px solid #ddd; margin-bottom:10px; background:white; opacity:0.6;">
+                                        <div><b>${s.name}</b></div>
+                                        <div style="font-size:12px; color:#666;">难度: ${'⭐'.repeat(s.difficulty)}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div style="flex:1; background:black; color:#0f0; font-family:monospace; padding:20px; height:400px; overflow-y:auto;" id="sim-console">
+                                > 等待启动模拟...<br>
+                                > 当前加载策略: ${JSON.stringify(window.agentConfig || {})}
+                            </div>
+                        </div>
+                        <div style="margin-top:20px; text-align:right;">
+                            <button class="primary" onclick="runSimulation()">▶ 运行全量测试</button>
+                        </div>
+                    `;
+                    setTimeout(() => window.runSimulation = () => {
+                        const consoleDiv = document.getElementById('sim-console');
+                        const config = window.agentConfig || {};
+                        let score = 100;
+                        
+                        consoleDiv.innerHTML = "> 正在初始化虚拟环境...\n";
+                        
+                        stepConfig.props.scenarios.forEach((s, i) => {
+                            setTimeout(() => {
+                                document.getElementById('scen-'+i).style.opacity = '1';
+                                document.getElementById('scen-'+i).style.borderLeft = '4px solid #1890ff';
+                                consoleDiv.innerHTML += `\n> [TEST] 正在加载 ${s.name} ...\n`;
+                                
+                                // 简单的逻辑判定模拟
+                                if (s.name.includes("泵送") && !config.surface_correction) {
+                                    consoleDiv.innerHTML += `  [ERROR] 致命错误！未启用浇筑面修正。回弹值虚高 15%。\n`;
+                                    consoleDiv.innerHTML += `  [FAIL] 场景测试失败 (-30分)\n`;
+                                    score -= 30;
+                                } else if (s.name.includes("碳化") && config.carbon_depth === 'none') {
+                                    consoleDiv.innerHTML += `  [ERROR] 致命错误！未检测碳化深度。强度推定值偏差 > 20%。\n`;
+                                    consoleDiv.innerHTML += `  [FAIL] 场景测试失败 (-40分)\n`;
+                                    score -= 40;
+                                } else {
+                                    consoleDiv.innerHTML += `  [PASS] 策略运行正常。误差 < 5%。\n`;
+                                }
+                                
+                                // [新增] 大脑判据逻辑检查
+                                if(config.brain_params) {
+                                    const { crackLimit, tiltLimit } = config.brain_params;
+                                    // 假设场景中有个边缘案例: 裂缝=8mm (应为B级)
+                                    // 如果学生设了 5mm，就会误判为 D级
+                                    if(crackLimit < 8) {
+                                        consoleDiv.innerHTML += `  [WARN] 大脑判据过于激进 (阈值 ${crackLimit}mm < 8mm)。\n`;
+                                        consoleDiv.innerHTML += `  [FAIL] 导致轻微病害被误判为危房 (-20分)\n`;
+                                        score -= 20;
+                                    }
+                                }
+
+                                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+                                
+                                if(i === stepConfig.props.scenarios.length - 1) {
+                                    consoleDiv.innerHTML += `\n============================\n`;
+                                    consoleDiv.innerHTML += `> 测试结束。最终得分: ${score}\n`;
+                                    if(score < 60) consoleDiv.innerHTML += `> 评级: 不合格 (请返回Step1修改策略)\n`;
+                                    else consoleDiv.innerHTML += `> 评级: 优秀智能体\n`;
+                                }
+                            }, i * 1500);
+                        });
+                    }, 100);
+                    break;
+
+                case 'Investigation':
+                    const docs = (stepConfig.props && Array.isArray(stepConfig.props.docs)) ? stepConfig.props.docs : [];
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (调查与查勘)</h3>
+                        <p>请查阅以下资料，提取关键信息（点击标签切换）。</p>
+                        
+                        <div style="background:white; border:1px solid #eee; height:450px; display:flex;">
+                            <!-- 左侧 Tab -->
+                            <div style="width:150px; background:#f5f5f5; border-right:1px solid #eee;">
+                                ${docs.length > 0 ? docs.map((d,i) => 
+                                    `<div class="doc-tab ${i===0?'active':''}" onclick="switchDoc(${i}, this)" style="padding:15px; cursor:pointer; border-bottom:1px solid #eee;">${d.title}</div>`
+                                ).join('') : `<div style="padding:15px; color:#999;">暂无资料</div>`}
+                            </div>
+                            <!-- 右侧 Content -->
+                            <div class="doc-content" style="flex:1; padding:20px; overflow-y:auto;">
+                                ${docs.length > 0 ? docs.map((d,i) => {
+                                    if (d.type === 'text') {
+                                        return `
+                                            <div id="doc-${i}" class="doc-pane" style="display:${i===0?'block':'none'};">
+                                                <h4 style="margin-top:0;">${d.title}</h4>
+                                                <div style="background:#fffbe6; padding:15px; border:1px solid #ffe58f; border-radius:4px;">
+                                                    ${d.content || ''}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    if (d.type === 'photo') {
+                                        return `
+                                            <div id="doc-${i}" class="doc-pane" style="display:${i===0?'block':'none'};">
+                                                <h4 style="margin-top:0;">${d.title}</h4>
+                                                <div style="width:100%; height:300px; background:#eee; display:flex; align-items:center; justify-content:center; color:#999; font-size:12px;">
+                                                    [模拟照片]
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    if (d.type === 'chart') {
+                                        const data = Array.isArray(d.data) ? d.data : [];
+                                        return `
+                                            <div id="doc-${i}" class="doc-pane" style="display:${i===0?'block':'none'};">
+                                                <h4 style="margin-top:0;">${d.title}</h4>
+                                                <div style="height:200px; display:flex; align-items:flex-end; gap:20px; padding-bottom:10px; border-bottom:1px solid #ccc;">
+                                                    ${data.map((v,di) => 
+                                                        `<div style="width:40px; background:${v<-10?'#ff4d4f':'#1890ff'}; height:${Math.abs(v)*10}px; position:relative;">
+                                                            <span style="position:absolute; top:-20px; width:100%; text-align:center; font-size:12px;">${v}</span>
+                                                            <span style="position:absolute; bottom:-25px; width:100%; text-align:center; font-size:12px;">W${di+1}</span>
+                                                        </div>`
+                                                    ).join('')}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    return `
+                                        <div id="doc-${i}" class="doc-pane" style="display:${i===0?'block':'none'};">
+                                            <h4 style="margin-top:0;">${d.title}</h4>
+                                            <div style="background:#f0f0f0; padding:15px; border-radius:4px;">
+                                                <code>${JSON.stringify(d)}</code>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('') : ''}
+                            </div>
+                        </div>
+                    `;
+                    setTimeout(() => window.switchDoc = (idx, el) => {
+                        document.querySelectorAll('.doc-pane').forEach(el => el.style.display = 'none');
+                        document.getElementById('doc-'+idx).style.display = 'block';
+                        document.querySelectorAll('.doc-tab').forEach(el => el.classList.remove('active'));
+                        if (el) el.classList.add('active');
+                    }, 100);
+                    break;
+
+                case 'CrackMicroscope':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (裂缝测宽仪)</h3>
+                        <p>请使用电子刻度显微镜读取裂缝最大宽度。</p>
+                        
+                        <div style="display:flex; gap:20px;">
+                            <!-- 宏观图 -->
+                            <div style="width:300px; height:400px; background:#f0f0f0; position:relative; cursor:crosshair;" onmousemove="moveMicroscope(event)">
+                                <div style="position:absolute; top:20px; left:20px; color:#999;">[墙面宏观图]</div>
+                                <svg width="100%" height="100%" style="position:absolute;">
+                                    <path d="M50,350 L250,50" stroke="#595959" stroke-width="2" fill="none"/>
+                                    <!-- 热区 -->
+                                    <circle cx="150" cy="200" r="10" fill="rgba(255,0,0,0.2)" />
+                                </svg>
+                                <!-- 放大镜框 -->
+                                <div id="mag-box" style="width:100px; height:100px; border:2px solid #1890ff; position:absolute; pointer-events:none; display:none;"></div>
+                            </div>
+                            
+                            <!-- 微观读数区 -->
+                            <div style="flex:1; background:#222; color:white; padding:20px; display:flex; flex-direction:column; align-items:center;">
+                                <h4>电子目镜视图 (x40)</h4>
+                                <div style="width:300px; height:300px; background:black; border:4px solid #444; border-radius:50%; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+                                    <!-- 刻度线 -->
+                                    <div style="position:absolute; width:100%; height:1px; background:rgba(255,255,255,0.5);"></div>
+                                    <div style="position:absolute; height:100%; width:1px; background:rgba(255,255,255,0.5);"></div>
+                                    <!-- 模拟裂缝影像 -->
+                                    <div id="micro-crack" style="width:20px; height:300px; background:#333; transform:rotate(45deg); opacity:0.5;"></div>
+                                </div>
+                                <div style="margin-top:20px; text-align:center;">
+                                    <label>当前读数 (mm): </label>
+                                    <input type="number" id="crack-val" style="width:80px; font-size:18px; text-align:center;" placeholder="0.0">
+                                    <button onclick="saveCrackData()">记录数据</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        window.moveMicroscope = (e) => {
+                            const box = document.getElementById('mag-box');
+                            box.style.display = 'block';
+                            box.style.left = (e.offsetX - 50) + 'px';
+                            box.style.top = (e.offsetY - 50) + 'px';
+                            
+                            // 模拟靠近热区时，显微镜里看到裂缝
+                            const dist = Math.sqrt(Math.pow(e.offsetX-150, 2) + Math.pow(e.offsetY-200, 2));
+                            const micro = document.getElementById('micro-crack');
+                            if(dist < 20) {
+                                micro.style.background = '#8c8c8c'; // 可见
+                                micro.style.width = (12.4 * 2) + 'px'; // 模拟宽度
+                            } else {
+                                micro.style.background = '#111'; // 不可见
+                            }
+                        };
+                        window.saveCrackData = () => {
+                            const v = document.getElementById('crack-val').value;
+                            if(v) {
+                                alert(`已记录最大裂缝宽度: ${v} mm`);
+                                window.globalCrackWidth = v; // 存全局
+                            }
+                        };
+                    }, 100);
+                    break;
+
+                case 'TiltMeasurement':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (倾斜测量)</h3>
+                        <p>请操作全站仪测量房屋角点的垂直度。</p>
+                        <div style="text-align:center; padding:40px; background:#fafafa; border:1px solid #eee;">
+                            <div style="font-size:40px;">🔭</div>
+                            <p>仪器已架设，照准目标棱镜...</p>
+                            <div style="font-family:monospace; background:#333; color:#0f0; display:inline-block; padding:15px; border-radius:4px; margin:20px 0;">
+                                H: 12.500 m <br>
+                                dH: 0.150 m <br>
+                                i = dH/H = <span id="tilt-res">--</span> %
+                            </div>
+                            <br>
+                            <button class="primary" onclick="measureTilt()">读取数据</button>
+                        </div>
+                    `;
+                    setTimeout(() => window.measureTilt = () => {
+                        const val = (0.150 / 12.500 * 100).toFixed(2);
+                        document.getElementById('tilt-res').innerText = val;
+                        window.globalTilt = val;
+                        alert(`已记录倾斜率: ${val}%`);
+                    }, 100);
+                    break;
+
+                case 'ConclusionReport':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (综合鉴定报告)</h3>
+                        <div class="form-container">
+                            <h4>1. 检测数据汇总</h4>
+                            <div class="form-group">
+                                <label class="form-label">最大裂缝宽度</label>
+                                <input class="form-input" id="rep-width" readonly style="background:#f0f0f0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">房屋倾斜率</label>
+                                <input class="form-input" id="rep-tilt" readonly style="background:#f0f0f0">
+                            </div>
+                            
+                            <h4>2. 鉴定评级 (依据 JGJ 125)</h4>
+                            <div class="form-group">
+                                <label class="form-label">判定逻辑</label>
+                                <div style="font-size:12px; color:#666; background:#fffbe6; padding:10px; border:1px solid #ffe58f;">
+                                    第4.2.1条：裂缝>10mm 且 倾斜>1% -> 应评定为 D级
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">等级结论</label>
+                                <select class="form-select" id="rep-level">
+                                    <option value="">请选择...</option>
+                                    <option value="B">B级</option>
+                                    <option value="C">C级</option>
+                                    <option value="D">D级</option>
+                                </select>
+                            </div>
+                            
+                            <button class="primary" onclick="submitReport()">提交报告</button>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        // 自动填入数据
+                        document.getElementById('rep-width').value = (window.globalCrackWidth || '--') + ' mm';
+                        document.getElementById('rep-tilt').value = (window.globalTilt || '--') + ' %';
+                        
+                        window.submitReport = () => {
+                            const lvl = document.getElementById('rep-level').value;
+                            if(lvl === 'D') {
+                                alert("✅ 判定正确！\n数据符合 D 级危房标准。");
+                            } else {
+                                alert("❌ 判定错误。\n请对照规范条文重新检查数据。");
+                            }
+                        };
+                    }, 100);
+                    break;
+
+                case 'PhotoViewer':
+                    // 模拟一张墙面裂缝照片 (用SVG占位)
+                    const svgPlaceholder = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                        <rect width="800" height="600" fill="#f0f0f0"/>
+                        <path d="M100,500 L250,350 L300,380 L450,200" stroke="#595959" stroke-width="2" fill="none"/>
+                        <path d="M450,200 L480,180 L550,220" stroke="#ff4d4f" stroke-width="4" fill="none" />
+                        <text x="400" y="300" font-family="Arial" font-size="24" fill="#999">现场勘查照片 #2026-001</text>
+                    </svg>`);
+                    
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (现场勘查)</h3>
+                        <p>请仔细观察现场照片，记录可见病害特征。</p>
+                        
+                        <div class="photo-viewer">
+                            <div class="photo-main">
+                                <img src="data:image/svg+xml,${svgPlaceholder}" alt="现场照片" />
+                                <!-- 模拟热点 -->
+                                <div style="position:absolute; top:33%; left:56%; width:100px; height:80px; border:2px dashed red; cursor:pointer;" 
+                                     title="点击查看详情" onclick="alert('发现主裂缝！\n宽度：1.2mm\n走向：斜向开展')"></div>
+                            </div>
+                            <div class="photo-info">
+                                <h4>照片信息</h4>
+                                <div class="info-row"><span>拍摄时间</span> <span class="info-val">2026-02-02 14:30</span></div>
+                                <div class="info-row"><span>拍摄位置</span> <span class="info-val">南立面 1-3轴</span></div>
+                                <div class="info-row"><span>构件类型</span> <span class="info-val">承重砖墙</span></div>
+                                
+                                <h4 style="margin-top:20px;">病害标记 (点击添加)</h4>
+                                <div>
+                                    <span class="defect-tag" onclick="addLog('裂缝')">+ 裂缝</span>
+                                    <span class="defect-tag" onclick="addLog('渗水')">+ 渗水</span>
+                                    <span class="defect-tag" onclick="addLog('剥落')">+ 剥落</span>
+                                </div>
+                                
+                                <div id="defect-log" style="margin-top:10px; height:100px; overflow-y:auto; border:1px solid #eee; padding:5px; font-size:12px;">
+                                    <i>暂无记录...</i>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    // 注入组件逻辑
+                    setTimeout(() => window.addLog = (txt) => {
+                        const box = document.getElementById('defect-log');
+                        if(box.innerHTML.includes('暂无')) box.innerHTML = '';
+                        box.innerHTML += `<div>• 已记录: ${txt} (位置待定)</div>`;
+                    }, 100);
+                    break;
+                
+                case 'CrackMapper':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (裂缝测绘)</h3>
+                        <p>请在图纸上绘制裂缝分布，并标记关键测量点</p>
+                        
+                        <div class="crack-workspace">
+                            <div class="crack-toolbar">
+                                <button class="tool-btn active" onclick="setCrackTool('pen')">✏️ 裂缝画笔</button>
+                                <button class="tool-btn" onclick="setCrackTool('point')">📍 测点标记</button>
+                                <button class="tool-btn" onclick="setCrackTool('eraser')">🧹 橡皮擦</button>
+                                <div style="margin-top:auto; font-size:12px; color:#999;">
+                                    提示：长按鼠标绘制裂缝走向，单击添加测点。
+                                </div>
+                            </div>
+                            
+                            <div class="drawing-board" id="crack-board" onmousedown="startCrackDraw(event)" onmousemove="drawCrack(event)" onmouseup="endCrackDraw()">
+                                <!-- 预置底图 -->
+                                <svg width="100%" height="100%" style="position:absolute; top:0; left:0; pointer-events:none;">
+                                    <!-- 简单的墙面示意 -->
+                                    <rect x="50" y="50" width="100" height="100" fill="none" stroke="#ccc" stroke-width="2"/>
+                                    <rect x="250" y="50" width="100" height="100" fill="none" stroke="#ccc" stroke-width="2"/>
+                                    <text x="100" y="180" fill="#999" text-anchor="middle">窗-1</text>
+                                    <text x="300" y="180" fill="#999" text-anchor="middle">窗-2</text>
+                                    
+                                    <!-- 动态绘制层 -->
+                                    <path id="current-path" class="crack-path" d="" />
+                                </svg>
+                                <div id="crack-points-layer"></div>
+                            </div>
+                        </div>
+                    `;
+                    // 注入组件逻辑
+                    setTimeout(initCrackLogic, 100);
+                    break;
+                
+                case 'ReboundHammerSim':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (回弹仪)</h3>
+                        <p>请选择测区并进行16点回弹采样 (JGJ/T 23-2011)</p>
+                        
+                        <div class="rebound-container">
+                            <!-- 左侧：测区选择 -->
+                            <div>
+                                <h4>1. 选择测区 (Zone)</h4>
+                                <div class="grid-wall" id="grid-wall">
+                                    <!-- JS 生成网格 -->
+                                </div>
+                                <p style="font-size:12px; color:#666; margin-top:5px;">当前测区: <span id="curr-zone-id">--</span></p>
+                            </div>
+                            
+                            <!-- 右侧：回弹操作 -->
+                            <div class="hammer-panel">
+                                <h4>2. 弹击操作 (Action)</h4>
+                                <div class="hammer-body" id="hammer-body">
+                                    <div class="hammer-scale">
+                                        <div class="hammer-pointer" id="hammer-pointer"></div>
+                                    </div>
+                                </div>
+                                <button class="hammer-button" id="btn-fire" onclick="fireHammer()" disabled>PRESS</button>
+                                
+                                <div class="data-log" id="rebound-log">
+                                    > 等待选择测区...
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    // 注入组件逻辑
+                    setTimeout(initReboundLogic, 100);
+                    break;
+
+                case 'Scanner':
+                    // 动态生成 Scanner 组件的 HTML 结构
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (钢筋扫描仪)</h3>
+                        <p>请拖动探头寻找钢筋信号，找到信号最强点（Cover值最小）</p>
+                        
+                        <div class="scanner-container">
+                            <!-- 主机屏幕 -->
+                            <div class="scanner-device">
+                                <div class="device-screen">
+                                    <div class="signal-bar-container">
+                                        <div class="signal-bar-fill" id="signal-fill" style="height: 10%;"></div>
+                                    </div>
+                                    <div class="screen-value">
+                                        <span id="val-thickness">--</span> <span class="screen-unit">mm</span>
+                                    </div>
+                                    <div class="screen-label">SIGNAL / THICKNESS</div>
+                                    
+                                    <!-- 波形线 (SVG) -->
+                                    <svg width="220" height="200" style="position:absolute; top:0; left:0; pointer-events:none;">
+                                        <path id="signal-wave" d="M0,100 L220,100" stroke="#0f0" stroke-width="1" fill="none" opacity="0.3"/>
+                                    </svg>
+                                </div>
+                                <div class="device-controls">
+                                    <button class="device-btn" onclick="scannerReset()">RESET</button>
+                                    <button class="device-btn" onclick="scannerSave()">SAVE</button>
+                                    <button class="device-btn" onclick="alert('蜂鸣器开关')">SOUND</button>
+                                    <button class="device-btn" onclick="alert('切换直径')">MODE</button>
+                                </div>
+                            </div>
+                            
+                            <!-- 墙面扫描区 -->
+                            <div class="wall-surface" id="wall-area" onmousemove="handleProbeMove(event)">
+                                <!-- 探头跟随鼠标 -->
+                                <div class="probe" id="probe" style="display:none;">
+                                    <div>PROBE</div>
+                                    <div>▼</div>
+                                </div>
+                                
+                                <!-- 隐藏的钢筋数据 (仅用于逻辑判断) -->
+                                <!-- 假设墙内有3根竖向钢筋 -->
+                                <div class="hidden-rebar" style="left:150px; top:0; bottom:0; width:12px;" data-cover="25"></div>
+                                <div class="hidden-rebar" style="left:300px; top:0; bottom:0; width:12px;" data-cover="28"></div>
+                                <div class="hidden-rebar" style="left:450px; top:0; bottom:0; width:12px;" data-cover="22"></div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // 注入组件特有的 JS 逻辑
+                    setTimeout(initScannerLogic, 100); 
+                    break;
+
+                case 'GridSelector':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (测区布置)</h3>
+                        <p>根据规范要求，请在构件表面布置至少 ${stepConfig.props.min} 个测区。</p>
+                        
+                        <div style="display:flex; gap:20px; align-items:flex-start;">
+                            <div class="grid-wall" id="layout-grid" style="width:500px; height:300px; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(3, 1fr);">
+                                <!-- 5x3 网格 -->
+                            </div>
+                            
+                            <div style="width:250px; padding:20px; background:#fafafa; border-radius:8px;">
+                                <h4>布置规则 (JGJ/T 23)</h4>
+                                <ul style="font-size:13px; color:#666; padding-left:20px;">
+                                    <li>测区数不宜少于10个</li>
+                                    <li>测区面积宜为 200x200mm</li>
+                                    <li>避开预埋件和钢筋密集区</li>
+                                </ul>
+                                <div style="margin-top:20px; font-weight:bold; color:#1890ff;">
+                                    已选测区: <span id="sel-count" style="font-size:24px;">0</span> / 10
+                                </div>
+                                <button class="primary" style="width:100%; margin-top:20px;" onclick="autoLayout()">一键智能布置</button>
+                            </div>
+                        </div>
+                    `;
+                    // 注入逻辑
+                    setTimeout(initGridLayout, 100);
+                    break;
+
+                case 'ParamSetup':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (参数设置)</h3>
+                        <p>在开始扫描前，请根据设计图纸设置仪器参数。</p>
+                        
+                        <div class="form-container">
+                            <div class="form-group">
+                                <label class="form-label">1. 设计钢筋直径 (Diameter)</label>
+                                <select class="form-select">
+                                    <option value="12" selected>Φ12 mm</option>
+                                    <option value="14">Φ14 mm</option>
+                                    <option value="16">Φ16 mm</option>
+                                    <option value="20">Φ20 mm</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">2. 扫描模式 (Scan Mode)</label>
+                                <div style="display:flex; gap:10px;">
+                                    <label><input type="radio" name="mode" checked> 厚度扫描 (Thickness)</label>
+                                    <label><input type="radio" name="mode"> 网格扫描 (Grid Image)</label>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">3. 修正系数 (Calibration)</label>
+                                <input type="number" class="form-input" value="1.0" step="0.1">
+                                <div style="font-size:12px; color:#999; margin-top:5px;">* 依据 JJG(交通) 046-2004 规程</div>
+                            </div>
+                            <button class="primary" onclick="alert('参数已下发至仪器！')">确认并连接仪器</button>
+                        </div>
+                    `;
+                    break;
+
+                case 'SubTaskLauncher':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (子任务启动)</h3>
+                        <div style="padding:30px; background:#f0f2f5; border-radius:8px; text-align:center;">
+                            <div style="font-size:18px; font-weight:bold; margin-bottom:10px;">${stepConfig.props.title}</div>
+                            <p style="color:#666; margin-bottom:20px;">${stepConfig.props.desc}</p>
+                            <div style="display:flex; justify-content:center; gap:20px;">
+                                <button class="primary" onclick="launchSubTask('${stepConfig.props.sub_task_id}')">🚀 立即前往检测现场</button>
+                                <button onclick="alert('模拟跳过：假设已获取到数据')">⚠️ 跳过 (仅调试)</button>
+                            </div>
+                            <div style="margin-top:20px; font-size:12px; color:#999;">
+                                * 点击前往将跳转至独立的检测技术流程，完成后自动返回此处。
+                            </div>
+                        </div>
+                    `;
+                    // 注入跳转逻辑
+                    setTimeout(() => window.launchSubTask = (tid) => {
+                        loadTask(tid, { mode: 'subtask' });
+                    }, 100);
+                    break;
+
+                case 'ReasoningQuiz':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (成因分析)</h3>
+                        <div class="quiz-container">
+                            <p style="font-size:16px; margin-bottom:20px;">根据裂缝形态（倒八字）和现场环境（邻近基坑），判断主要成因：</p>
+                            
+                            <div class="quiz-option" onclick="checkQuiz(this, false)">
+                                <div style="width:24px; height:24px; border:2px solid #ddd; border-radius:50%; margin-right:15px;"></div>
+                                <div>
+                                    <div style="font-weight:bold;">A. 温度应力</div>
+                                    <div style="font-size:12px; color:#666;">顶层温差过大导致混凝土收缩</div>
+                                </div>
+                            </div>
+                            
+                            <div class="quiz-option" onclick="checkQuiz(this, true)">
+                                <div style="width:24px; height:24px; border:2px solid #ddd; border-radius:50%; margin-right:15px;"></div>
+                                <div>
+                                    <div style="font-weight:bold;">B. 地基不均匀沉降 (端部沉降)</div>
+                                    <div style="font-size:12px; color:#666;">基坑降水导致端部土体固结，墙体产生负弯矩</div>
+                                </div>
+                            </div>
+                            
+                            <div class="quiz-option" onclick="checkQuiz(this, false)">
+                                <div style="width:24px; height:24px; border:2px solid #ddd; border-radius:50%; margin-right:15px;"></div>
+                                <div>
+                                    <div style="font-weight:bold;">C. 荷载过大</div>
+                                    <div style="font-size:12px; color:#666;">上部楼层堆载超过设计承载力</div>
+                                </div>
+                            </div>
+
+                            <div id="quiz-res" class="quiz-feedback"></div>
+                        </div>
+                    `;
+                    setTimeout(() => window.checkQuiz = (el, isCorrect) => {
+                        document.querySelectorAll('.quiz-option').forEach(d => d.classList.remove('selected'));
+                        el.classList.add('selected');
+                        const res = document.getElementById('quiz-res');
+                        res.style.display = 'block';
+                        if(isCorrect) {
+                            res.className = 'quiz-feedback success';
+                            res.innerHTML = '<b>✅ 回答正确！</b><br>基坑降水引起端部沉降，导致墙体上部受拉，形成典型的“倒八字”裂缝。';
+                        } else {
+                            res.className = 'quiz-feedback error';
+                            res.innerHTML = '❌ 回答错误。<br>请回顾裂缝形态：温度裂缝通常在顶层，荷载裂缝通常在受压区。';
+                        }
+                    }, 100);
+                    break;
+                
+                case 'DataForm':
+                    // 根据 props 判断是“强度计算”还是“结论评定”
+                    if (stepConfig.props && stepConfig.props.type === 'conclusion') {
+                        componentHTML = `
+                            <h3>组件: ${stepConfig.component} (结论评定)</h3>
+                            <p>请依据 JGJ 125 规范，结合前序检测数据，给出鉴定结论。</p>
+                            
+                            <div class="form-container">
+                                <div class="form-group">
+                                    <label class="form-label">最大裂缝宽度 (mm)</label>
+                                    <input type="number" class="form-input" value="12.5" readonly style="background:#f5f5f5; color:#666;">
+                                    <div style="font-size:12px; color:#999; margin-top:5px;">* 数据来源: 步骤3 (裂缝测绘)</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">房屋整体倾斜率 (%)</label>
+                                    <input type="number" class="form-input" placeholder="请输入实测倾斜率...">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">危险性等级评定 (JGJ 125)</label>
+                                    <select class="form-select" id="danger-level">
+                                        <option value="">-- 请选择 --</option>
+                                        <option value="A">A级 (无危险)</option>
+                                        <option value="B">B级 (有危险点)</option>
+                                        <option value="C">C级 (局部危险)</option>
+                                        <option value="D">D级 (整体危险)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">处置建议</label>
+                                    <textarea class="form-input" rows="3" placeholder="请输入处理意见..."></textarea>
+                                </div>
+                                <button class="primary" onclick="alert('鉴定报告已生成！')">生成鉴定报告</button>
+                            </div>
+                        `;
+                    } else {
+                        // 默认逻辑：回弹强度计算
+                        componentHTML = `
+                            <h3>组件: ${stepConfig.component} (数据计算)</h3>
+                            <p>请输入原始回弹值，系统将自动计算强度推定值。</p>
+                            
+                            <div class="form-container">
+                                <div class="form-group">
+                                    <label class="form-label">平均回弹值 (Rm)</label>
+                                    <input type="number" id="inp-rm" class="form-input" placeholder="等待自动获取..." value="">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">碳化深度 (dm, mm)</label>
+                                    <input type="number" id="inp-dm" class="form-input" value="1.0">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">浇筑面状态</label>
+                                    <select class="form-select">
+                                        <option value="0">侧面 (默认)</option>
+                                        <option value="1">顶面 (+修正)</option>
+                                        <option value="-1">底面 (-修正)</option>
+                                    </select>
+                                </div>
+                                <button class="primary" onclick="calcStrength()">开始计算</button>
+                                
+                                <div id="calc-res" class="calc-result">
+                                <div><strong>计算结果 (JGJ/T 23-2011):</strong></div>
+                                <div style="font-size:24px; color:#1890ff; margin:10px 0;">32.4 MPa</div>
+                                <div style="font-size:12px; color:#666;">推断等级: C30</div>
+                                <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
+                                    <button onclick="issueLicense()" style="background:#52c41a; color:white; border:none; width:100%;">🏅 领取【回弹仪】操作执照</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        window.calcStrength = () => {
+                            const rm = parseFloat(document.getElementById('inp-rm').value);
+                            const dm = parseFloat(document.getElementById('inp-dm').value);
+                            if(!rm) { alert("回弹值不能为空！"); return; }
+                            const strength = (0.025 * Math.pow(rm, 1.8) * (1 - dm*0.05)).toFixed(1);
+                            const resDiv = document.getElementById('calc-res');
+                            resDiv.style.display = 'block';
+                            resDiv.querySelector('div:nth-child(2)').innerText = strength + ' MPa';
+                            resDiv.querySelector('div:nth-child(3)').innerText = '推断等级: C' + (Math.floor(strength/5)*5);
+                        };
+                        window.issueLicense = () => {
+                            if(!window.toolLicenses) window.toolLicenses = {};
+                            window.toolLicenses.hammer = true;
+                            alert("🎉 恭喜！你已获得【数字回弹仪】操作授权。\n现在可以在智能体构建中使用该工具了。");
+                        };
+                        if (window.globalAvgStrength && window.globalAvgStrength > 0) {
+                                document.getElementById('inp-rm').value = window.globalAvgStrength;
+                                document.getElementById('inp-rm').style.backgroundColor = '#f6ffed';
+                                document.getElementById('inp-rm').style.borderColor = '#b7eb8f';
+                            }
+                        }, 100);
+                    }
+                    break;
+
+                case 'DrillSim':
+                    componentHTML = `
+                        <h3>组件: ${stepConfig.component} (钻孔验证)</h3>
+                        <div style="text-align:center; padding:50px;">
+                            <div style="font-size:60px;">🔩</div>
+                            <p>此为破坏性检测，仅在对非破损结果有争议时进行。</p>
+                            <button onclick="alert('钻孔深度: 26mm\n实测偏差: +1mm')">开始钻孔</button>
+                        </div>
+                    `;
+                    break;
+
+
+                default:
+                    // 通用兜底组件
+                    componentHTML = `
+                        <div class="component-box">
+                            <h3>通用组件: ${stepConfig.component}</h3>
+                            <p>这里将加载对应的功能模块...</p>
+                            <code>Props: ${JSON.stringify(stepConfig.props)}</code>
+                        </div>
+                    `;
+            }
+
+            // 组装最终页面
+            const isLastStep = currentStepIndex === currentTask.steps.length - 1;
+            const primaryLabel = isLastStep ? (taskStack.length > 0 ? '完成并返回' : '提交任务') : '下一步';
+            workspace.innerHTML = `
+                ${componentHTML}
+                <div class="footer-actions">
+                    <button ${currentStepIndex === 0 ? 'disabled' : ''} onclick="prevStep()">上一步</button>
+                    <button class="primary" onclick="nextStep()">${primaryLabel}</button>
+                </div>
+            `;
+        }
+
+        // 4. 导航控制
+        function nextStep() {
+            if (currentStepIndex < currentTask.steps.length - 1) {
+                currentStepIndex++;
+                renderStepper();
+                renderStepContent();
+            } else {
+                if (taskStack.length > 0) {
+                    const parent = taskStack.pop();
+                    loadTask(parent.taskId, { mode: 'restore', stepIndex: parent.stepIndex + 1 });
+                } else {
+                    alert("流程结束！生成实验报告...");
+                }
+            }
+        }
+
+        function prevStep() {
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                renderStepper();
+                renderStepContent();
+            }
+        }
+
+        // 初始化：默认加载第一个任务
+        window.onload = () => loadTask('assessment_01');
+
+        // ================= Rebound Hammer Logic (独立模块) =================
+        let currZone = null;
+        let zoneData = {}; // { "zone-1": [38, 40, ...] }
+        let globalAvgStrength = 0; // [新增] 全局变量，用于跨步骤传值
+
+        function initReboundLogic() {
+            // ... (省略 Grid 初始化代码) ...
+            const grid = document.getElementById('grid-wall');
+            if (!grid) return;
+            
+            grid.innerHTML = '';
+            for(let i=1; i<=16; i++) {
+                const z = document.createElement('div');
+                z.className = 'grid-zone';
+                z.innerText = '#' + i;
+                z.id = 'zone-' + i;
+                z.onclick = () => selectZone(i);
+                grid.appendChild(z);
+            }
+        }
+
+        // ... (selectZone, fireHammer, updateReboundLog 保持不变) ...
+
+        function fireHammer() {
+            if (!currZone) return;
+            
+            const hammer = document.getElementById('hammer-body');
+            const pointer = document.getElementById('hammer-pointer');
+            
+            hammer.classList.add('active');
+            setTimeout(() => hammer.classList.remove('active'), 100);
+            
+            const val = Math.floor(Math.random() * 20) + 30;
+            const topPos = 140 - (val * 2.5);
+            pointer.style.top = topPos + 'px';
+            
+            zoneData[currZone].push(val);
+            updateReboundLog();
+            
+            if (zoneData[currZone].length >= 16) {
+                const avg = calculateAvg(zoneData[currZone]);
+                alert(`测区 #${currZone} 采样完成！\n平均回弹值: ${avg}`);
+                document.getElementById('btn-fire').disabled = true;
+                document.getElementById('zone-'+currZone).style.backgroundColor = '#d9f7be';
+                
+                // [新增] 将最新测区的平均值存入全局变量，供下一步使用
+                globalAvgStrength = avg; 
+            }
+        }
+
+        // ... (calculateAvg 保持不变) ...
+
+        function updateReboundLog() {
+            const log = document.getElementById('rebound-log');
+            const data = zoneData[currZone] || [];
+            log.innerHTML = `> 测区 #${currZone} 数据记录:<br>` + 
+                            data.map((v, i) => `[${i+1}] ${v}`).join(', ');
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // ================= Grid Layout Logic (独立模块) =================
+        let selectedGrids = 0;
+        function initGridLayout() {
+            const grid = document.getElementById('layout-grid');
+            if(!grid) return;
+            
+            grid.innerHTML = '';
+            // 5x3 = 15个区域
+            for(let i=1; i<=15; i++) {
+                const div = document.createElement('div');
+                div.className = 'grid-zone';
+                div.innerText = '#' + i;
+                div.onclick = function() {
+                    this.classList.toggle('selected');
+                    updateGridCount();
+                };
+                grid.appendChild(div);
+            }
+            updateGridCount();
+        }
+        
+        function updateGridCount() {
+            selectedGrids = document.querySelectorAll('#layout-grid .selected').length;
+            document.getElementById('sel-count').innerText = selectedGrids;
+        }
+
+        function autoLayout() {
+            // 随机选10个
+            const zones = document.querySelectorAll('#layout-grid .grid-zone');
+            zones.forEach(z => z.classList.remove('selected'));
+            
+            const indices = [];
+            while(indices.length < 10) {
+                const r = Math.floor(Math.random() * 15);
+                if(!indices.includes(r)) indices.push(r);
+            }
+            indices.forEach(i => zones[i].classList.add('selected'));
+            updateGridCount();
+        }
+
+        // ================= Crack Mapper Logic (独立模块) =================
+        let crackTool = 'pen';
+        let isDrawing = false;
+        let pathPoints = [];
+
+        function initCrackLogic() {
+            // 重置状态
+            pathPoints = [];
+            isDrawing = false;
+        }
+
+        function setCrackTool(tool) {
+            crackTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function startCrackDraw(e) {
+            if (crackTool === 'pen') {
+                isDrawing = true;
+                const rect = document.getElementById('crack-board').getBoundingClientRect();
+                pathPoints = [{x: e.clientX - rect.left, y: e.clientY - rect.top}];
+                updatePathD();
+            } else if (crackTool === 'point') {
+                const rect = document.getElementById('crack-board').getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const pt = document.createElement('div');
+                pt.className = 'crack-point';
+                pt.style.position = 'absolute';
+                pt.style.left = (x-4) + 'px';
+                pt.style.top = (y-4) + 'px';
+                pt.style.width = '8px';
+                pt.style.height = '8px';
+                pt.style.borderRadius = '50%';
+                pt.style.background = '#1890ff';
+                document.getElementById('crack-points-layer').appendChild(pt);
+            }
+        }
+
+        function drawCrack(e) {
+            if (!isDrawing) return;
+            const rect = document.getElementById('crack-board').getBoundingClientRect();
+            pathPoints.push({x: e.clientX - rect.left, y: e.clientY - rect.top});
+            updatePathD();
+        }
+
+        function endCrackDraw() {
+            isDrawing = false;
+        }
+
+        function updatePathD() {
+            if (pathPoints.length < 2) return;
+            const d = `M ${pathPoints[0].x} ${pathPoints[0].y} ` + 
+                      pathPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ');
+            document.getElementById('current-path').setAttribute('d', d);
+        }
+
+        // ================= Scanner Logic (独立模块) =================
+        function initScannerLogic() {
+            const probe = document.getElementById('probe');
+            const wall = document.getElementById('wall-area');
+            
+            // 鼠标进入/离开墙面
+            wall.onmouseenter = () => { probe.style.display = 'flex'; };
+            wall.onmouseleave = () => { probe.style.display = 'none'; };
+        }
+
+        function handleProbeMove(e) {
+            const wall = document.getElementById('wall-area');
+            const probe = document.getElementById('probe');
+            const signalBar = document.getElementById('signal-fill');
+            const valText = document.getElementById('val-thickness');
+            
+            // 1. 更新探头位置
+            const rect = wall.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 限制探头不出界
+            probe.style.left = x + 'px';
+            probe.style.top = y + 'px';
+            
+            // 2. 计算信号强度 (模拟电磁感应)
+            // 获取所有钢筋数据
+            const rebars = [
+                { x: 150, cover: 25 },
+                { x: 300, cover: 28 },
+                { x: 450, cover: 22 }
+            ];
+            
+            let minDist = 9999;
+            let targetRebar = null;
+            
+            // 寻找最近的钢筋
+            rebars.forEach(rebar => {
+                const dist = Math.abs(x - rebar.x);
+                if (dist < minDist) {
+                    minDist = dist;
+                    targetRebar = rebar;
+                }
+            });
+            
+            // 3. 信号处理算法
+            // 假设感应半径为 40px
+            const SENSOR_RANGE = 40;
+            let signal = 0;
+            let thickness = "--";
+            
+            if (minDist < SENSOR_RANGE) {
+                // 距离越近，信号越强 (线性或抛物线模拟)
+                // signal = 1.0 - (minDist / SENSOR_RANGE);
+                // 使用 Cosine 函数模拟波峰，更像真实信号
+                signal = Math.cos((minDist / SENSOR_RANGE) * (Math.PI / 2));
+                
+                // 只有当信号很强时 (>80%) 才显示数值
+                if (signal > 0.8) {
+                    // 模拟读数抖动: 真实值 +/- 1mm
+                    const noise = (Math.random() - 0.5) * 1.5;
+                    thickness = (targetRebar.cover + noise).toFixed(1);
+                }
+            }
+            
+            // 4. 更新 UI
+            signalBar.style.height = (signal * 100) + '%';
+            
+            // 颜色变化：强信号变红
+            if (signal > 0.9) {
+                signalBar.style.background = '#f00';
+                valText.style.color = '#f00';
+            } else {
+                signalBar.style.background = 'linear-gradient(to top, #0f0, #ff0)';
+                valText.style.color = '#0f0';
+            }
+            
+            valText.innerText = thickness;
+        }
+
+        function scannerReset() {
+            // 清除标记或重置状态
+            alert("仪器已复位，请重新校准空气背景值。");
+        }
+
+        function scannerSave() {
+            const val = document.getElementById('val-thickness').innerText;
+            if (val === "--") {
+                alert("当前无有效读数，无法保存！");
+            } else {
+                alert(`已保存数据: ${val} mm`);
+                // 这里可以调用核心引擎的 saveData() API
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工法楼实训：沉降裂缝诊断与处置</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .nav-tab {
+            padding: 10px 25px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+        .nav-tab.active {
+            background-color: #1890ff;
+            color: white;
+        }
+
+        /* Main Container */
+        .main-view {
+            width: 900px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: none; /* Hidden by default */
+        }
+        .main-view.active {
+            display: block;
+        }
+
+        /* Demo View Styles (Inherited & Adjusted) */
+        svg {
+            width: 100%;
+            height: 450px;
+            border: 1px solid #eee;
+            background-color: #e6f7ff;
+            overflow: hidden;
+            user-select: none;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 8px;
+        }
+        button.action-btn {
+            padding: 8px 16px;
+            cursor: pointer;
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button.action-btn:hover { background-color: #40a9ff; }
+        button.action-btn:disabled { background-color: #d9d9d9; cursor: not-allowed; }
+        
+        .status-panel {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+        }
+        .status-card {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border-top: 4px solid #d9d9d9;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+        .status-card h4 { margin: 0 0 10px 0; color: #333; font-size: 15px; border-bottom: 1px solid #f0f0f0; padding-bottom: 5px; }
+        .status-text { font-size: 13px; color: #666; line-height: 1.5; margin: 0; }
+        .highlight { color: #ff4d4f; font-weight: bold; }
+        .card-active-cause { border-top-color: #1890ff; background: #e6f7ff; }
+        .card-active-app { border-top-color: #faad14; background: #fffbe6; }
+        .card-active-res { border-top-color: #ff4d4f; background: #fff1f0; }
+
+        /* Task View Styles */
+        .task-step {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .task-title { font-size: 18px; font-weight: bold; color: #333; border-left: 4px solid #1890ff; padding-left: 10px; }
+        .task-score { font-size: 14px; color: #faad14; font-weight: bold; background: #fffbe6; padding: 4px 8px; border-radius: 4px; }
+        
+        .task-content { padding: 10px; background: #fafafa; border-radius: 8px; }
+        
+        /* Task 1: Mapping */
+        .mapping-area { cursor: crosshair; }
+        .hit-area { fill: transparent; cursor: pointer; }
+        .hit-area:hover { stroke: #1890ff; stroke-width: 2; stroke-dasharray: 4; }
+        
+        /* Task 2: Quiz */
+        .quiz-option {
+            display: block;
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .quiz-option:hover { border-color: #1890ff; }
+        .quiz-option.selected { border-color: #1890ff; background-color: #e6f7ff; }
+        
+        /* Task 3: Monitoring */
+        .tool-bar { margin-bottom: 10px; display: flex; gap: 10px; }
+        .tool-btn { padding: 5px 10px; border: 1px solid #d9d9d9; background: white; cursor: pointer; border-radius: 4px; }
+        .tool-btn.active { background: #1890ff; color: white; border-color: #1890ff; }
+        
+        /* Common */
+        .feedback { margin-top: 10px; padding: 10px; border-radius: 4px; display: none; }
+        .feedback.success { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        .feedback.error { background: #fff1f0; color: #ff4d4f; border: 1px solid #ffa39e; }
+
+        /* SVG Internal Styles */
+        .ground-surface { fill: #8c8c8c; }
+        .soil-layer { fill: #d9d9d9; }
+        .water-layer { fill: #bae7ff; opacity: 0.6; }
+        .building-base { fill: #fff1f0; stroke: #595959; stroke-width: 2; }
+        .window { fill: #b5f5ec; stroke: #595959; stroke-width: 1; }
+        .roof { fill: #ffccc7; stroke: #595959; stroke-width: 2; }
+        .crack { fill: none; stroke: #ff4d4f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+        .pump-station { fill: #595959; }
+        
+        .monitor-point { stroke: #fff; stroke-width: 1; }
+    </style>
+</head>
+<body>
+
+    <div class="nav-tabs">
+        <button class="nav-tab active" onclick="switchTab('demo')">情景复现 (Observation)</button>
+        <button class="nav-tab" onclick="switchTab('tasks')">实训考核 (Examination)</button>
+    </div>
+
+    <!-- VIEW 1: SCENARIO DEMO -->
+    <div id="view-demo" class="main-view active">
+        <h2>情景复现：基坑降水与建筑沉降</h2>
+        <svg viewBox="0 0 800 450" id="scene-demo">
+            <defs>
+                <pattern id="soilPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <circle cx="2" cy="2" r="1" fill="#bfbfbf" />
+                </pattern>
+            </defs>
+            <g id="ground-group">
+                <rect x="0" y="300" width="800" height="150" fill="url(#soilPattern)" />
+                <rect id="water-table" x="0" y="330" width="800" height="120" class="water-layer" />
+                <line x1="0" y1="300" x2="800" y2="300" stroke="#595959" stroke-width="2" />
+            </g>
+            <g id="construction-site" transform="translate(650, 250)">
+                <rect x="0" y="0" width="60" height="50" class="pump-station" />
+                <text x="30" y="-10" text-anchor="middle" font-size="12" fill="#595959">降水井</text>
+                <path d="M30,50 L30,150" stroke="#595959" stroke-width="2" stroke-dasharray="5,5" />
+            </g>
+            <g id="building-group" transform="translate(100, 100)">
+                <rect id="building-body" x="0" y="0" width="400" height="200" class="building-base" />
+                <path d="M-20,0 L200,-40 L420,0 Z" class="roof" />
+                <g id="windows-group">
+                    <rect x="40" y="40" width="60" height="60" class="window" />
+                    <rect x="170" y="40" width="60" height="60" class="window" />
+                    <rect x="300" y="40" width="60" height="60" class="window" />
+                    <rect x="40" y="120" width="60" height="60" class="window" />
+                    <rect x="170" y="120" width="60" height="60" class="window" />
+                    <rect x="300" y="120" width="60" height="60" class="window" />
+                </g>
+                <path id="crack-right" d="M360,40 L300,100" class="crack" style="visibility:hidden" />
+                <path id="crack-left" d="M40,40 L100,100" class="crack" style="visibility:hidden" />
+                <text x="200" y="-60" text-anchor="middle" font-size="14" fill="#333">砖混住宅楼</text>
+            </g>
+            <g id="settlement-arrow" transform="translate(520, 310)" opacity="0">
+                <path d="M0,0 L0,40 M-5,35 L0,40 L5,35" stroke="#ff4d4f" stroke-width="3" fill="none" />
+                <text x="10" y="25" font-size="12" fill="#ff4d4f">沉降量大</text>
+            </g>
+        </svg>
+
+        <div class="controls">
+            <button class="action-btn" id="btn-play">▶ 开始模拟</button>
+            <button class="action-btn" id="btn-reset">↺ 重置</button>
+            <input type="range" id="progress-slider" min="0" max="1" step="0.01" value="0" style="width:300px">
+        </div>
+
+        <div class="status-panel">
+            <div class="status-card" id="card-cause">
+                <h4>1. 原因机理 (Cause)</h4>
+                <p id="desc-cause" class="status-text">待启动...</p>
+            </div>
+            <div class="status-card" id="card-app">
+                <h4>2. 物理表象 (Appearance)</h4>
+                <p id="desc-app" class="status-text">待启动...</p>
+            </div>
+            <div class="status-card" id="card-res">
+                <h4>3. 最终结果 (Result)</h4>
+                <p id="desc-res" class="status-text">待启动...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW 2: STUDENT TASKS -->
+    <div id="view-tasks" class="main-view">
+        <h2>实训考核：助理检测员任务</h2>
+        
+        <!-- Task 1 -->
+        <div class="task-step">
+            <div class="task-header">
+                <span class="task-title">任务一：裂缝测绘与形态识别</span>
+                <span class="task-score">分值: 30%</span>
+            </div>
+            <p>根据线索（东侧沉降大），请在立面上点击<b>最可能出现沉降裂缝的窗角位置</b>，并选择裂缝形态。</p>
+            <div class="task-content">
+                <svg viewBox="0 0 400 220" id="task1-svg" style="height: 300px; background: white;">
+                    <g transform="translate(50, 50)">
+                        <rect x="0" y="0" width="300" height="150" class="building-base" />
+                        <!-- Windows with Hit Areas -->
+                        <g id="t1-windows">
+                            <!-- Bottom Left -->
+                            <g class="win-group" data-pos="bottom-left">
+                                <rect x="20" y="80" width="50" height="50" class="window" />
+                                <rect x="10" y="70" width="70" height="70" class="hit-area" onclick="handleTask1Click(this, 'left')" />
+                            </g>
+                            <!-- Bottom Right -->
+                            <g class="win-group" data-pos="bottom-right">
+                                <rect x="230" y="80" width="50" height="50" class="window" />
+                                <rect x="220" y="70" width="70" height="70" class="hit-area" onclick="handleTask1Click(this, 'right')" />
+                            </g>
+                        </g>
+                        <!-- Cracks placeholders -->
+                        <path id="t1-crack-correct" d="M280,80 L230,130" class="crack" style="display:none" /> <!-- Right Inverted \ -->
+                        <path id="t1-crack-wrong" d="M20,130 L70,80" class="crack" style="display:none" stroke="gray" /> <!-- Left Positive / -->
+                        <text x="150" y="170" text-anchor="middle" font-size="12">南立面示意图</text>
+                    </g>
+                </svg>
+                <div id="t1-feedback" class="feedback"></div>
+            </div>
+        </div>
+
+        <!-- Task 2 -->
+        <div class="task-step">
+            <div class="task-header">
+                <span class="task-title">任务二：成因机理推演</span>
+                <span class="task-score">分值: 30%</span>
+            </div>
+            <div class="task-content">
+                <p><b>问题：</b> 为什么该案例中会出现“倒八字”裂缝（\ /）？</p>
+                <label class="quiz-option"><input type="radio" name="t2" value="A"> A. 基础中间沉降大，墙体下部受拉 (Sagging)</label>
+                <label class="quiz-option"><input type="radio" name="t2" value="B"> B. 基础两端沉降大，墙体上部受拉 (Hogging)</label>
+                <label class="quiz-option"><input type="radio" name="t2" value="C"> C. 温度热胀冷缩导致顶层开裂</label>
+                <button class="action-btn" onclick="checkTask2()">提交答案</button>
+                <div id="t2-feedback" class="feedback"></div>
+            </div>
+        </div>
+
+        <!-- Task 3 -->
+        <div class="task-step">
+            <div class="task-header">
+                <span class="task-title">任务三：监测方案设计</span>
+                <span class="task-score">分值: 20%</span>
+            </div>
+            <p>请在图上布置 <b>沉降观测点</b> (至少2个，重点在沉降大的一侧)。</p>
+            <div class="task-content">
+                <div class="tool-bar">
+                    <button class="tool-btn active" id="btn-tool-settlement">▲ 沉降观测点</button>
+                    <span style="margin-left:auto; font-size:12px; color:#666">点击图纸位置布点</span>
+                </div>
+                <svg viewBox="0 0 400 200" id="task3-svg" style="height: 200px; background: white;" onclick="handleTask3Click(event)">
+                    <g transform="translate(50, 50)">
+                        <rect x="0" y="0" width="300" height="100" class="building-base" />
+                        <text x="150" y="50" text-anchor="middle" fill="#ccc">建筑物平面/立面示意</text>
+                        <line x1="320" y1="0" x2="320" y2="100" stroke="#1890ff" stroke-dasharray="4"/>
+                        <text x="330" y="50" font-size="10" fill="#1890ff">邻近基坑侧</text>
+                    </g>
+                    <!-- Points container -->
+                    <g id="t3-points"></g>
+                </svg>
+                <button class="action-btn" style="margin-top:10px" onclick="checkTask3()">提交方案</button>
+                <div id="t3-feedback" class="feedback"></div>
+            </div>
+        </div>
+
+        <!-- Task 4 -->
+        <div class="task-step">
+            <div class="task-header">
+                <span class="task-title">任务四：处置决策汇报</span>
+                <span class="task-score">分值: 20%</span>
+            </div>
+            <div class="task-content">
+                <p><b>决策情景：</b> 业主很着急，要求马上用水泥把缝堵上，并询问是否需要撤离。</p>
+                <p>你的专业建议是：</p>
+                <textarea id="t4-input" rows="3" style="width:100%; margin-bottom:10px" placeholder="请输入你的建议关键词（如：先稳后修、D级、撤离...）"></textarea>
+                <button class="action-btn" onclick="checkTask4()">提交汇报</button>
+                <div id="t4-feedback" class="feedback"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Tab Switching Logic ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.main-view').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById('view-' + tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // --- Demo Animation Logic (Preserved) ---
+        gsap.registerPlugin();
+        const tl = gsap.timeline({ paused: true, onUpdate: updateUI });
+        
+        // Demo Elements
+        const waterTable = document.getElementById('water-table');
+        const buildingGroup = document.getElementById('building-group');
+        const crackRight = document.getElementById('crack-right');
+        const crackLeft = document.getElementById('crack-left');
+        const settlementArrow = document.getElementById('settlement-arrow');
+        
+        // Demo Animation Phases
+        tl.to(waterTable, { attr: { y: 400, height: 50 }, duration: 2, ease: "power1.inOut" }, "phase1")
+          .to(buildingGroup, { rotation: 2, y: "+=10", transformOrigin: "0% 100%", duration: 2, ease: "power1.inOut" }, "phase1")
+          .to(settlementArrow, { opacity: 1, y: "+=10", duration: 1 }, "phase1+=0.5");
+          
+        const lenRight = crackRight.getTotalLength();
+        const lenLeft = crackLeft.getTotalLength();
+        gsap.set(".crack", { strokeDasharray: lenRight, strokeDashoffset: lenRight, visibility: "visible" });
+        
+        tl.to(crackRight, { strokeDashoffset: 0, duration: 1, ease: "power2.out" }, "phase2")
+          .to(crackLeft, { strokeDashoffset: 0, duration: 1, ease: "power2.out" }, "phase2");
+
+        // Demo Controls
+        const slider = document.getElementById('progress-slider');
+        slider.addEventListener("input", function() { tl.progress(this.value).pause(); });
+        document.getElementById('btn-play').addEventListener("click", () => tl.progress() === 1 ? tl.restart() : tl.play());
+        document.getElementById('btn-reset').addEventListener("click", () => { tl.pause(0); updateUI(); });
+
+        function updateUI() {
+            const p = tl.progress();
+            slider.value = p;
+            const cCause = document.getElementById('card-cause'), cApp = document.getElementById('card-app'), cRes = document.getElementById('card-res');
+            const dCause = document.getElementById('desc-cause'), dApp = document.getElementById('desc-app'), dRes = document.getElementById('desc-res');
+            
+            cCause.className = cApp.className = cRes.className = "status-card";
+            
+            if (p < 0.1) {
+                dCause.innerText = "基坑降水尚未开始，地基土处于天然湿度状态。";
+                dApp.innerText = "地下水位线位置正常 (-2.0m)，地基承载力稳定。";
+                dRes.innerText = "建筑结构完好，无可见变形或裂缝。";
+            } else if (p < 0.6) {
+                cCause.classList.add("card-active-cause"); cApp.classList.add("card-active-app");
+                dCause.innerHTML = "<b>降水诱发</b>：右侧基坑持续抽取地下水，导致孔隙水压力消散。";
+                dApp.innerHTML = "<b>水位下降</b>：形成降水漏斗，土体有效应力增大，开始发生固结压缩。";
+                dRes.innerText = "地基开始发生不均匀沉降（右大左小），结构产生微小倾斜。";
+            } else {
+                cCause.classList.add("card-active-cause"); cApp.classList.add("card-active-app"); cRes.classList.add("card-active-res");
+                dCause.innerHTML = "<b>不均匀沉降</b>：端部沉降量 > 中部沉降量，墙体发生“反拱”变形。";
+                dApp.innerHTML = "<b>应力超限</b>：墙体上部受拉，主拉应力超过砌体抗拉强度。";
+                dRes.innerHTML = "<span class='highlight'>倒八字裂缝</span>：窗角出现典型斜裂缝，房屋进入危险状态 (D级)。";
+            }
+        }
+
+        // --- Task 1 Logic ---
+        function handleTask1Click(el, side) {
+            const feedback = document.getElementById('t1-feedback');
+            const crackCorrect = document.getElementById('t1-crack-correct');
+            
+            if (side === 'right') {
+                // Correct Location
+                const choice = confirm("你点击了右侧窗角。请判断裂缝形态：\n点击 [确定] 选择 '倒八字' (\\)\n点击 [取消] 选择 '正八字' (/)");
+                if (choice) {
+                    crackCorrect.style.display = "block";
+                    feedback.className = "feedback success";
+                    feedback.style.display = "block";
+                    feedback.innerHTML = "<b>✅ 正确！</b><br>由于右侧（端部）沉降大，墙体上部受拉，在窗角产生垂直于主拉应力的“倒八字”裂缝。";
+                } else {
+                    feedback.className = "feedback error";
+                    feedback.style.display = "block";
+                    feedback.innerHTML = "❌ 错误。<br>正八字裂缝通常出现在中间沉降大的情况（下部受拉）。";
+                }
+            } else {
+                feedback.className = "feedback error";
+                feedback.style.display = "block";
+                feedback.innerHTML = "❌ 位置不准确。<br>基坑在东侧（右侧），沉降变形最大处应在右侧端部，此处应力最集中。";
+            }
+        }
+
+        // --- Task 2 Logic ---
+        function checkTask2() {
+            const selected = document.querySelector('input[name="t2"]:checked');
+            const feedback = document.getElementById('t2-feedback');
+            if (!selected) return alert("请先选择一个答案");
+            
+            if (selected.value === 'B') {
+                feedback.className = "feedback success";
+                feedback.style.display = "block";
+                feedback.innerHTML = "<b>✅ 回答正确！</b><br>基坑降水导致端部沉降 > 中部沉降，结构发生“反拱”（Hogging）变形，顶部受拉，故产生倒八字裂缝。";
+            } else {
+                feedback.className = "feedback error";
+                feedback.style.display = "block";
+                feedback.innerHTML = "❌ 回答错误。请回顾情景复现中的“结构变形”动画。";
+            }
+        }
+
+        // --- Task 3 Logic ---
+        const t3Points = [];
+        function handleTask3Click(e) {
+            const svg = document.getElementById('task3-svg');
+            const pt = svg.createSVGPoint();
+            pt.x = e.clientX; pt.y = e.clientY;
+            const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+            
+            // Draw Point
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", svgP.x);
+            circle.setAttribute("cy", svgP.y);
+            circle.setAttribute("r", 5);
+            circle.setAttribute("fill", "#1890ff");
+            circle.setAttribute("stroke", "white");
+            document.getElementById('t3-points').appendChild(circle);
+            
+            t3Points.push({x: svgP.x, y: svgP.y});
+        }
+
+        function checkTask3() {
+            const feedback = document.getElementById('t3-feedback');
+            if (t3Points.length < 2) {
+                feedback.className = "feedback error";
+                feedback.style.display = "block";
+                feedback.innerText = "❌ 点位数量不足，至少需要布置2个观测点。";
+                return;
+            }
+            
+            // Check if any point is near the right side (Construction side)
+            // Local coords: Right side is around x=350 (inside group transform 50, so absolute x ~ 400?)
+            // The group is translate(50,50). 
+            // Building width is 300. So right end is at local x=300 -> global x=350.
+            const hasRightPoint = t3Points.some(p => p.x > 250); // Rough check
+            
+            if (hasRightPoint) {
+                feedback.className = "feedback success";
+                feedback.style.display = "block";
+                feedback.innerHTML = "<b>✅ 方案合理</b><br>重点监测了靠近基坑一侧（沉降敏感区）。建议频率：在降水期间应加密观测（如1次/天）。";
+            } else {
+                feedback.className = "feedback error";
+                feedback.style.display = "block";
+                feedback.innerHTML = "⚠️ <b>方案需优化</b><br>您未在靠近基坑（右侧）的敏感区域布点，无法有效监控最大沉降。";
+            }
+        }
+
+        // --- Task 4 Logic ---
+        function checkTask4() {
+            const val = document.getElementById('t4-input').value;
+            const feedback = document.getElementById('t4-feedback');
+            
+            if (val.includes("先稳后修") || (val.includes("稳定") && val.includes("修"))) {
+                 feedback.className = "feedback success";
+                 feedback.style.display = "block";
+                 feedback.innerHTML = "<b>✅ 决策正确！</b><br>核心原则：<b>先稳后修</b>。在沉降未稳定前严禁修补。同时依据规范，若倾斜或裂缝超限，应评定为D级危房，建议立即撤离。";
+            } else {
+                 feedback.className = "feedback error";
+                 feedback.style.display = "block";
+                 feedback.innerHTML = "⚠️ <b>决策风险</b><br>必须遵循“先稳后修”原则。如果立即堵缝，随着沉降继续，裂缝会再次拉开，不仅浪费且掩盖隐患。";
+            }
+        }
+    </script>
+</body>
+</html>
