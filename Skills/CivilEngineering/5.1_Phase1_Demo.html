@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实训 Phase 1: 现场踏勘 (Demo)</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #252526;
+            --text-color: #cccccc;
+            --accent-color: #0e639c;
+            --highlight-color: #d7ba7d;
+            --danger-color: #f44747;
+            --success-color: #4ec9b0;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: grid;
+            grid-template-rows: 40px 1fr 40px;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background-color: #333333;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            border-bottom: 1px solid #000;
+        }
+        .task-status { font-weight: bold; color: var(--text-color); }
+        .progress-bar-container { width: 200px; height: 10px; background: #444; border-radius: 5px; overflow: hidden; }
+        .progress-bar { width: 0%; height: 100%; background: var(--success-color); transition: width 0.3s; }
+
+        /* Main Content */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: 100%;
+        }
+
+        /* Scene Viewport */
+        #scene-viewport {
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 50%, #8FBC8F 50%, #228B22 100%); /* Sky and Ground */
+            position: relative;
+            overflow: hidden;
+            cursor: crosshair;
+            user-select: none;
+        }
+
+        /* Building Visualization (CSS Art) */
+        .building {
+            position: absolute;
+            bottom: 100px;
+            left: 20%;
+            width: 300px;
+            height: 400px;
+            background-color: #d3d3d3;
+            border: 2px solid #555;
+            box-shadow: 10px 10px 20px rgba(0,0,0,0.5);
+        }
+        .window {
+            position: absolute;
+            background: #444;
+            border: 2px solid #fff;
+        }
+        .window.w1 { top: 50px; left: 30px; width: 60px; height: 80px; }
+        .window.w2 { top: 50px; right: 30px; width: 60px; height: 80px; }
+        .window.w3 { bottom: 50px; left: 30px; width: 60px; height: 80px; } /* Target Window */
+        .window.w4 { bottom: 50px; right: 30px; width: 60px; height: 80px; }
+
+        /* Clue: Inverted-V Crack */
+        .hotspot-crack {
+            position: absolute;
+            bottom: 40px;
+            left: 20px;
+            width: 80px;
+            height: 100px;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .hotspot-crack:hover { 
+            background-color: rgba(255, 0, 0, 0.1); 
+            border: 1px dashed red; 
+        }
+        .hotspot-crack:hover::after {
+            content: "Scanning... 剪切特征分析中";
+            position: absolute;
+            top: -30px;
+            left: 0;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 5px;
+            font-size: 12px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+        .crack-visual {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 0; 
+            height: 0; 
+            border-left: 2px solid transparent;
+            border-right: 2px solid transparent;
+            border-bottom: 60px solid #555; /* Base shape */
+            transform: rotate(0deg);
+            opacity: 0.6;
+        }
+        /* Drawing the inverted V using pseudo elements */
+        .crack-visual::before {
+            content: '';
+            position: absolute;
+            top: -60px; left: -10px;
+            width: 2px; height: 60px;
+            background: #333;
+            transform: rotate(-15deg);
+        }
+        .crack-visual::after {
+            content: '';
+            position: absolute;
+            top: -60px; left: 10px;
+            width: 2px; height: 60px;
+            background: #333;
+            transform: rotate(15deg);
+        }
+
+        /* Clue: Excavation Pit */
+        .hotspot-pit {
+            position: absolute;
+            bottom: 50px;
+            right: 10%;
+            width: 200px;
+            height: 150px;
+            background: linear-gradient(45deg, #3E2723 25%, #5D4037 25%, #5D4037 50%, #3E2723 50%, #3E2723 75%, #5D4037 75%, #5D4037 100%);
+            background-size: 20px 20px;
+            border: 3px dashed yellow;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: yellow;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+        .hotspot-pit:hover { 
+            opacity: 0.8; 
+            transform: scale(1.02); 
+            transition: 0.3s; 
+        }
+        .hotspot-pit:hover::after {
+            content: "Context: 关键环境诱因";
+            position: absolute;
+            top: -30px;
+            right: 0;
+            background: rgba(255, 200, 0, 0.9);
+            color: #000;
+            padding: 5px;
+            font-size: 12px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        /* Clue: Graffiti (Noise) */
+        .hotspot-graffiti {
+            position: absolute;
+            bottom: 150px;
+            left: 45%;
+            width: 50px;
+            height: 50px;
+            font-size: 40px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .hotspot-graffiti:hover { transform: scale(1.2); }
+        .hotspot-graffiti:hover::after {
+            content: "Noise: 无效干扰项";
+            position: absolute;
+            top: -30px;
+            left: 0;
+            background: rgba(255, 50, 50, 0.8);
+            color: #fff;
+            padding: 5px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+
+        /* Clue: Apron Displacement */
+        .hotspot-apron {
+            position: absolute;
+            bottom: -20px;
+            left: -10px;
+            width: 320px;
+            height: 30px;
+            cursor: pointer;
+            z-index: 5;
+        }
+        .hotspot-apron:hover { border: 1px dashed red; }
+        .apron-visual {
+            width: 100%;
+            height: 10px;
+            background: #999;
+            transform: skewX(-20deg);
+            margin-top: 5px;
+            border-top: 5px solid #111; /* Stronger gap indication */
+            box-shadow: 0 5px 5px rgba(0,0,0,0.5);
+        }
+
+        /* Hover Tooltips (restored for new SVGs) */
+        .hotspot-crack:hover::after,
+        .hotspot-vertical:hover::after,
+        .hotspot-corner:hover::after,
+        .hotspot-apron:hover::after {
+            content: "Scanning...";
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 3px 8px;
+            font-size: 11px;
+            border-radius: 3px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* Sidebar */
+        aside {
+            background-color: var(--panel-bg);
+            border-left: 1px solid #000;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        .panel-section { margin-bottom: 20px; }
+        .panel-title { font-size: 0.9em; text-transform: uppercase; color: #888; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        
+        /* Memory Log */
+        #memory-log {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+            padding: 10px;
+            color: var(--success-color);
+        }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-entry.error { color: var(--danger-color); }
+        .log-entry.system { color: #888; }
+
+        /* Agent Chat */
+        #agent-chat {
+            flex-grow: 1;
+            background: #333;
+            border-radius: 5px;
+            padding: 15px;
+            position: relative;
+        }
+        .agent-avatar {
+            width: 40px; height: 40px; background: var(--accent-color); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+            position: absolute; top: -20px; left: 10px; border: 2px solid var(--panel-bg);
+        }
+        #chat-content { margin-top: 15px; font-size: 0.95em; line-height: 1.4; }
+
+        /* Footer */
+        footer {
+            background-color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 0.8em;
+        }
+        button {
+            background: #3c3c3c; color: white; border: 1px solid #555; padding: 5px 15px;
+            cursor: pointer; margin-right: 10px;
+        }
+        button:hover { background: #505050; }
+        button.primary { background: var(--success-color); color: black; border: none; font-weight: bold; display: none; }
+
+        /* Animations */
+        @keyframes scan {
+            0% { box-shadow: 0 0 0 0 rgba(78, 201, 176, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(78, 201, 176, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(78, 201, 176, 0); }
+        }
+        .scanning { animation: scan 1s infinite; }
+
+        /* Quiz Card */
+        .quiz-card {
+            background: #2d2d2d;
+            border: 1px solid var(--accent-color);
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            display: none; /* Hidden by default */
+            animation: fadeIn 0.3s;
+        }
+        .quiz-question { font-size: 0.9em; margin-bottom: 8px; font-weight: bold; }
+        .quiz-option {
+            display: block;
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 5px;
+            background: #444;
+            border: 1px solid #555;
+            color: #ccc;
+            cursor: pointer;
+            text-align: left;
+        }
+        .quiz-option:hover { background: #555; }
+        .quiz-option.correct { border-color: var(--success-color); color: var(--success-color); }
+        .quiz-option.wrong { border-color: var(--danger-color); color: var(--danger-color); }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="task-status">Phase 1: 现场踏勘</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span>Context Saturation:</span>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <span id="progress-text">0/2</span>
+        </div>
+    </header>
+
+    <main>
+        <div id="scene-viewport">
+            <!-- Simulated 3D Scene -->
+            
+            <!-- The Building -->
+            <div class="building">
+                <div class="window w1"></div>
+                <div class="window w2"></div>
+                <div class="window w3"></div>
+                <div class="window w4"></div>
+                
+                <!-- Clue 1: Crack (Inverted-V) -->
+                <div class="hotspot-crack" onclick="collectClue('crack')" title="可疑裂缝">
+                    <div class="crack-visual"></div>
+                </div>
+
+                <!-- Clue 2: Top Vertical Crack -->
+                <div class="hotspot-vertical" onclick="collectClue('vertical')" title="顶部竖向裂缝">
+                    <div class="crack-vertical-visual"></div>
+                </div>
+
+                <!-- Clue 3: Corner Separation -->
+                <div class="hotspot-corner" onclick="collectClue('corner')" title="纵横墙交接裂缝">
+                    <div class="crack-corner-visual"></div>
+                </div>
+
+                <!-- Clue 4: Apron Displacement -->
+                <div class="hotspot-apron" onclick="collectClue('apron')" title="散水坡错位">
+                    <div class="apron-visual"></div>
+                </div>
+
+                <!-- Noise: Graffiti -->
+                <div class="hotspot-graffiti" onclick="collectClue('graffiti')" title="墙面污渍">🎨</div>
+            </div>
+
+            <!-- Clue 5: Excavation Pit -->
+            <div class="hotspot-pit" onclick="collectClue('pit')" title="施工区域">
+                深基坑施工区<br>(Deep Excavation)
+            </div>
+
+        </div>
+
+        <aside>
+            <div class="panel-section">
+                <div class="panel-title">Agent Chat (助手)</div>
+                <div id="agent-chat">
+                    <div class="agent-avatar">AI</div>
+                    <div id="chat-content">
+                        老师，这栋楼情况复杂。我该重点关注哪些部位？<br>
+                        <small style="color:#aaa">(请点击场景中的可疑点)</small>
+                    </div>
+                    <!-- Quiz Container -->
+                    <div id="quiz-container" class="quiz-card"></div>
+                </div>
+            </div>
+
+            <div class="panel-section" style="flex-grow: 1; display: flex; flex-direction: column;">
+                <div class="panel-title">Memory Log (记忆流)</div>
+                <div id="memory-log">
+                    <div class="log-entry system">[SYSTEM] Agent initialized.</div>
+                    <div class="log-entry system">[SYSTEM] Vision module loaded.</div>
+                    <div class="log-entry system">[SYSTEM] Waiting for visual input...</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <footer>
+        <button onclick="resetSim()">重置场景</button>
+        <button id="btn-next" class="primary" onclick="alert('进入 Phase 2: 规则注入 (开发中...)')">进入 Phase 2</button>
+        <span style="margin-left: auto;">FPS: 60 | Mode: Drone View</span>
+    </footer>
+
+    <script>
+        const state = {
+            crackFound: false,
+            pitFound: false,
+            verticalFound: false,
+            cornerFound: false,
+            apronFound: false,
+            graffitiClicked: false
+        };
+
+        function updateProgress() {
+            let count = 0;
+            if (state.crackFound) count++;
+            if (state.pitFound) count++;
+            if (state.verticalFound) count++;
+            if (state.cornerFound) count++;
+            if (state.apronFound) count++;
+            
+            const total = 5;
+            const pct = (count / total) * 100;
+            document.getElementById('progress-bar').style.width = pct + '%';
+            document.getElementById('progress-text').innerText = count + '/' + total;
+
+            if (count === total) {
+                document.getElementById('btn-next').style.display = 'block';
+                agentSpeak("太棒了！所有线索收集完毕。<br>我们构建了完整的<b>证据链</b>：<br>1. 形态：倒八字+顶部竖向（反拱）<br>2. 环境：深基坑降水<br>3. 物理：散水坡脱开<br>准备进入 Phase 2！");
+                logSystem("Context Saturation reached 100%. Ready for Logic Injection.");
+            }
+        }
+
+
+        function agentSpeak(text) {
+            const chat = document.getElementById('chat-content');
+            chat.innerHTML = text;
+            // Clear quiz
+            document.getElementById('quiz-container').style.display = 'none';
+            document.getElementById('quiz-container').innerHTML = '';
+        }
+
+        function showQuiz(question, options, correctAnswerIndex, successCallback) {
+            const container = document.getElementById('quiz-container');
+            container.style.display = 'block';
+            container.innerHTML = `<div class="quiz-question">${question}</div>`;
+            
+            options.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'quiz-option';
+                btn.innerText = opt;
+                btn.onclick = () => {
+                    if (index === correctAnswerIndex) {
+                        btn.classList.add('correct');
+                        setTimeout(() => successCallback(), 500);
+                    } else {
+                        btn.classList.add('wrong');
+                        logSystem("Incorrect answer. Try again.", true);
+                    }
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function logMemory(type, content) {
+            const log = document.getElementById('memory-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `[MEMORY] <b style="color:white">${type}</b>: ${content}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function logSystem(text, isError = false) {
+            const log = document.getElementById('memory-log');
+            const entry = document.createElement('div');
+            entry.className = isError ? 'log-entry error' : 'log-entry system';
+            entry.innerText = `[SYSTEM] ${text}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function collectClue(type) {
+            // Find the button associated with this type
+            const btnId = 'btn-' + type;
+            const btn = document.getElementById(btnId);
+            
+            if (type === 'crack') {
+                if (state.crackFound) return;
+                btn.classList.add('scanning'); // Optional: visual feedback
+                agentSpeak("老师，我正在观察底层窗角...<br>发现了<b>上宽下窄</b>的倒八字形裂缝。<br>这种形态通常意味着地基发生了什么？");
+                
+                showQuiz(
+                    "考考你：倒八字裂缝对应的沉降模式是？",
+                    ["A. 中间沉降 > 两端沉降", "B. 两端沉降 > 中间沉降"],
+                    1, // B is correct
+                    () => {
+                        state.crackFound = true;
+                        btn.classList.remove('scanning');
+                        btn.classList.add('checked');
+                        btn.innerHTML = "<span>✅</span> 底层窗角 (已记录)";
+                        agentSpeak("原来如此！<b>端部下沉</b>把墙体撕裂了。我记住了，这是剪切破坏。");
+                        logMemory("Visual", "Inverted-V Crack (Shear Failure confirmed).");
+                        updateProgress();
+                    }
+                );
+            } 
+            else if (type === 'pit') {
+                if (state.pitFound) return;
+                agentSpeak("天啊，旁边有个深基坑！还在抽水。<br>老师，这会产生什么影响？");
+                
+                showQuiz(
+                    "基坑降水会导致周边土体：",
+                    ["A. 有效应力增加 -> 固结沉降", "B. 有效应力减小 -> 土体隆起"],
+                    0, // A is correct
+                    () => {
+                        state.pitFound = true;
+                        btn.classList.add('checked');
+                        btn.innerHTML = "<span>✅</span> 周边环境 (已记录)";
+                        agentSpeak("明白了！<b>降水导致固结沉降</b>。这肯定是主因！");
+                        logMemory("Environment", "Deep Excavation (Settlement Cause confirmed).");
+                        updateProgress();
+                    }
+                );
+            }
+            else if (type === 'vertical') {
+                if (state.verticalFound) return;
+                agentSpeak("注意看顶部窗下，有一条竖向裂缝。<br>这通常是伴随倒八字裂缝出现的。");
+                
+                showQuiz(
+                    "顶层窗下的竖向裂缝说明结构发生了什么变形？",
+                    ["A. 正向挠曲 (中间沉降大)", "B. 反拱变形 (两端沉降大)"],
+                    1, // B is correct
+                    () => {
+                        state.verticalFound = true;
+                        btn.classList.add('checked');
+                        btn.innerHTML = "<span>✅</span> 顶层窗台 (已记录)";
+                        agentSpeak("记录完毕！<b>反拱变形</b>。这是两端沉降的辅助证据。");
+                        logMemory("Visual", "Vertical Crack (Reverse Arching confirmed).");
+                        updateProgress();
+                    }
+                );
+            }
+            else if (type === 'corner') {
+                if (state.cornerFound) return;
+                agentSpeak("看墙角！纵横墙交接处似乎脱开了。<br>这说明结构的整体性有问题。");
+                
+                showQuiz(
+                    "纵横墙交接处的脱开暗示了什么问题？",
+                    ["A. 圈梁失效/整体性受损", "B. 砖块强度不足"],
+                    0, // A is correct
+                    () => {
+                        state.cornerFound = true;
+                        btn.classList.add('checked');
+                        btn.innerHTML = "<span>✅</span> 墙角连接 (已记录)";
+                        agentSpeak("收到！<b>整体性受损</b>。这意味着结构抵抗不均匀沉降的能力下降了。");
+                        logMemory("Visual", "Corner Separation (Integrity Loss).");
+                        updateProgress();
+                    }
+                );
+            }
+            else if (type === 'apron') {
+                if (state.apronFound) return;
+                agentSpeak("低头看脚下。散水坡和墙体之间有明显的缝隙！<br>这可不是施工缝。");
+                
+                showQuiz(
+                    "散水坡与墙体脱开是说明了什么？",
+                    ["A. 热胀冷缩", "B. 地基沉降的直接物理证据"],
+                    1, // B is correct
+                    () => {
+                        state.apronFound = true;
+                        btn.classList.add('checked');
+                        btn.innerHTML = "<span>✅</span> 建筑散水 (已记录)";
+                        agentSpeak("确凿无疑！<b>物理证据</b>。墙体确实相对于地面下沉了。");
+                        logMemory("Physical", "Apron Displacement (Direct Evidence).");
+                        updateProgress();
+                    }
+                );
+            } 
+            else if (type === 'graffiti') {
+                agentSpeak("呃... 这只是个涂鸦。<br>虽然不仅美观，但它不是结构病害。<br>请专注于结构安全！");
+                logSystem("Noise detected. Filtered out.", true);
+                btn.classList.add('noise');
+                setTimeout(() => {
+                     btn.classList.remove('noise');
+                }, 1000);
+            }
+        }
+
+        function resetSim() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
